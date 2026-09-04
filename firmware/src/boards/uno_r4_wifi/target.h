@@ -1,9 +1,10 @@
 #pragma once
 
 #include <Arduino.h>
+#include <optical_protocol.h>
 
 namespace target {
-constexpr uint32_t slot_us = 250;
+constexpr uint32_t slot_us = optical_protocol::slot_us;
 constexpr uint8_t led_count = 96;
 constexpr uint8_t irq_priority = 2;
 

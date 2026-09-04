@@ -22,7 +22,7 @@ uint32_t clock_hz = 0;
 void tick(timer_callback_args_t *) {
     const Mode mode = active_mode;
     if (mode == Mode::sweep) {
-        matrix.on(next_led);
+        matrix.on(optical_protocol::scan_order[next_led]);
     } else if (mode == Mode::corners && next_led == 0) {
         matrix.on(corners[corner_index]);
     } else {
@@ -82,7 +82,9 @@ void set_mode(Mode mode) {
 }
 
 void print_status(Print &out) {
-    out.print("{\"board\":\"uno_r4_wifi\",\"protocol\":\"sweep96-v0\",\"slot_us\":250,");
+    out.print("{\"board\":\"uno_r4_wifi\",\"protocol\":\"");
+    out.print(optical_protocol::id);
+    out.print("\",\"slot_us\":250,");
     out.print("\"period_us\":24000,\"clock_source\":\"PCLKD\",\"clock_hz\":");
     out.print(clock_hz);
     out.print(",\"divider\":1,\"irq_priority\":2,\"ready\":");
