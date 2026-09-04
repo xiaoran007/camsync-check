@@ -1,8 +1,17 @@
 {
   "schema_version": 1,
+  "analysis": {
+    "on_threshold": 20,
+    "threshold_margin": 5,
+    "max_saturated_fraction": 0.25,
+    "boundary_slack_slots": 1,
+    "max_abs_offset_us": 10000,
+    "target_resolution_us": 1000,
+    "pass_tolerance_us": null
+  },
   "target": {
     "profile": "builtin:uno_r4_wifi",
-    "protocol": "sweep96-v0",
+    "protocol": "r4-permuted96-v1",
     "slot_us": 250
   },
   "sources": [
@@ -19,10 +28,24 @@
       },
       "frames": [
         "../data/example/frame_000001.png",
-        "../data/example/frame_000002.png"
+        "../data/example/frame_000002.png",
+        "../data/example/frame_000003.png",
+        "../data/example/frame_000004.png",
+        "../data/example/frame_000005.png",
+        "../data/example/frame_000006.png",
+        "../data/example/frame_000007.png",
+        "../data/example/frame_000008.png"
       ],
-      "exposure": {"value_us": null, "provenance": "unknown"}
+      "exposure": {
+        "value_us": null,
+        "provenance": "unknown"
+      }
     }
   ],
-  "output": "../outputs/example"
+  "output": "../outputs/example",
+  "localization": {
+    "max_frames": 48,
+    "min_valid_frames": 3,
+    "orientation_margin": 2
+  }
 }

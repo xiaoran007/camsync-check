@@ -1,8 +1,17 @@
 {
   "schema_version": 1,
+  "analysis": {
+    "on_threshold": 20,
+    "threshold_margin": 5,
+    "max_saturated_fraction": 0.25,
+    "boundary_slack_slots": 1,
+    "max_abs_offset_us": 10000,
+    "target_resolution_us": 1000,
+    "pass_tolerance_us": null
+  },
   "target": {
     "profile": "builtin:uno_r4_wifi",
-    "protocol": "sweep96-v0",
+    "protocol": "r4-permuted96-v1",
     "slot_us": 250
   },
   "sources": [
@@ -19,9 +28,18 @@
       },
       "frames": [
         "../data/two-b0267/board_a/frame_000001.png",
-        "../data/two-b0267/board_a/frame_000002.png"
+        "../data/two-b0267/board_a/frame_000002.png",
+        "../data/two-b0267/board_a/frame_000003.png",
+        "../data/two-b0267/board_a/frame_000004.png",
+        "../data/two-b0267/board_a/frame_000005.png",
+        "../data/two-b0267/board_a/frame_000006.png",
+        "../data/two-b0267/board_a/frame_000007.png",
+        "../data/two-b0267/board_a/frame_000008.png"
       ],
-      "exposure": {"value_us": null, "provenance": "unknown"}
+      "exposure": {
+        "value_us": null,
+        "provenance": "unknown"
+      }
     },
     {
       "id": "source_b",
@@ -36,9 +54,18 @@
       },
       "frames": [
         "../data/two-b0267/board_b/frame_000001.png",
-        "../data/two-b0267/board_b/frame_000002.png"
+        "../data/two-b0267/board_b/frame_000002.png",
+        "../data/two-b0267/board_b/frame_000003.png",
+        "../data/two-b0267/board_b/frame_000004.png",
+        "../data/two-b0267/board_b/frame_000005.png",
+        "../data/two-b0267/board_b/frame_000006.png",
+        "../data/two-b0267/board_b/frame_000007.png",
+        "../data/two-b0267/board_b/frame_000008.png"
       ],
-      "exposure": {"value_us": null, "provenance": "unknown"}
+      "exposure": {
+        "value_us": null,
+        "provenance": "unknown"
+      }
     }
   ],
   "comparison": {
@@ -46,7 +73,45 @@
     "other_source": "source_b",
     "reference_camera": "a_camera_0",
     "other_camera": "b_camera_0",
-    "frame_pairs": [[0, 0], [1, 1]]
+    "frame_pairs": [
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        1
+      ],
+      [
+        2,
+        2
+      ],
+      [
+        3,
+        3
+      ],
+      [
+        4,
+        4
+      ],
+      [
+        5,
+        5
+      ],
+      [
+        6,
+        6
+      ],
+      [
+        7,
+        7
+      ]
+    ]
   },
-  "output": "../outputs/two-b0267"
+  "output": "../outputs/two-b0267",
+  "localization": {
+    "max_frames": 48,
+    "min_valid_frames": 3,
+    "orientation_margin": 2
+  }
 }
