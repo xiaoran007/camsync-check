@@ -1,0 +1,58 @@
+{
+  "schema_version": "0.1-draft",
+  "dataset_id": "example-b0267",
+  "target": {
+    "target_id": "optical_target_0",
+    "board_id": "uno_r4_wifi",
+    "protocol_id": "sweep96-v0",
+    "slot_us": 250,
+    "run_id": null
+  },
+  "sources": [
+    {
+      "source_id": "wide_0",
+      "frames": [
+        "../data/example/wide_0/frame_000001.png",
+        "../data/example/wide_0/frame_000002.png"
+      ]
+    }
+  ],
+  "cameras": [
+    {
+      "camera_id": "camera_0",
+      "node_id": "node_0",
+      "source_id": "wide_0",
+      "crop_xywh": [0, 0, 1280, 800],
+      "shutter": "global",
+      "exposure_us": null,
+      "exposure_source": "unknown"
+    },
+    {
+      "camera_id": "camera_1",
+      "node_id": "node_0",
+      "source_id": "wide_0",
+      "crop_xywh": [1280, 0, 1280, 800],
+      "shutter": "global",
+      "exposure_us": null,
+      "exposure_source": "unknown"
+    },
+    {
+      "camera_id": "camera_2",
+      "node_id": "node_0",
+      "source_id": "wide_0",
+      "crop_xywh": [2560, 0, 1280, 800],
+      "shutter": "global",
+      "exposure_us": null,
+      "exposure_source": "unknown"
+    },
+    {
+      "camera_id": "camera_3",
+      "node_id": "node_0",
+      "source_id": "wide_0",
+      "crop_xywh": [3840, 0, 1280, 800],
+      "shutter": "global",
+      "exposure_us": null,
+      "exposure_source": "unknown"
+    }
+  ]
+}

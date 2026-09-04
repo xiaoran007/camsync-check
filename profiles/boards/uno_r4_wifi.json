@@ -1,0 +1,22 @@
+{
+  "schema_version": "0.1-draft",
+  "profile_version": "0.1-draft",
+  "board_id": "uno_r4_wifi",
+  "status": "design_only",
+  "mcu": "RA4M1",
+  "matrix": {
+    "rows": 8,
+    "columns": 12,
+    "led_count": 96,
+    "indexing": "row_major_zero_based",
+    "orientation": "must_be_confirmed_by_localization"
+  },
+  "drive": {
+    "topology": "charlieplex",
+    "gpio_count": 11,
+    "planned_max_simultaneous_leds": 1
+  },
+  "candidate_slot_us": [250, 100],
+  "validated_slot_us": [],
+  "mapping_reference": "https://github.com/arduino/ArduinoCore-renesas/blob/1.6.0/libraries/Arduino_LED_Matrix/src/Arduino_LED_Matrix.h"
+}
