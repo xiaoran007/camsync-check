@@ -1,68 +1,71 @@
 # camsync-check
 
-MCU-driven LED firmware and an offline Python tool for checking multi-camera exposure synchronization. Users supply images; camera acquisition stays outside this repository.
+UNO R4 WiFi LED firmware and a Python CLI for checking camera synchronization from saved images. Camera acquisition stays outside this repository.
 
-**Status:** engineering scaffold. Container definitions and configuration examples exist; firmware, configuration loading, image decoding, and the CLI are not implemented. No timing accuracy has been established.
+**Status:** initial implementation; firmware compiles in Docker. Image decoding, automatic localization, and timing accuracy have not been validated with captures or hardware. The initial goal is approximately 1 ms checks under an independently established offset prior of less than 10 ms.
 
-## Firmware development
+## Build and run
 
-Use Docker with Compose and Make, or VS Code's **Reopen in Container** command. Both paths use the same `.devcontainer/compose.yaml` service and Dockerfile; host PlatformIO is not required.
+Firmware builds use the shared Dev Container, through VS Code's **Reopen in Container** or Make:
 
 ```sh
-make image                       # Build the firmware environment
+make image                       # Build the environment
 make dev                         # Open a container shell
-make firmware                    # Build the default board
-make firmware BOARD=uno_r4_wifi   # Explicit PlatformIO environment
+make firmware                    # Compile UNO R4 WiFi firmware
 ```
 
-Inside the container, use `pio run -d firmware -e uno_r4_wifi`. Firmware builds always run in the container. There is no firmware entry point yet, so these build commands cannot produce a firmware image at this stage.
+The environment pins its Debian Bookworm base image by digest, PlatformIO Core 6.1.18, `renesas-ra@1.9.0`, and ArduinoCore-renesas 1.6.0. Linux amd64 is used, including emulation on ARM hosts. The completed build used GCC 7.2.1. Build products are in `firmware/.pio/build/uno_r4_wifi/`; packages are cached in `.cache/platformio/`. Transitive dependencies are not exhaustively locked.
 
-The initial environment uses Debian Bookworm, Linux amd64, PlatformIO Core 6.1.18, and `renesas-ra@1.9.0`. ARM hosts use emulation. First use downloads dependencies inside the container. Artifacts appear in `firmware/.pio/`; packages are cached in `.cache/platformio/`. The base-image tag and transitive dependencies are not fully locked; record resolved versions and image identity at the first authorized build.
+Compilation and flashing are separate. USB passthrough and uploading are not configured. Program RA4M1 only, retaining the official ESP32-S3 firmware. After boot, the target runs without a serial connection: one LED per 250 µs slot, with all 96 LEDs visited once per 24 ms cycle. Serial at 115200 accepts `?` for JSON status, `s` for the measurement sequence, `c` for a slow corner-identification diagnostic, and `d` for dark. Use `s` throughout a capture; mode changes and resets interrupt the sequence.
 
-Uploading is a separate operation on the resulting artifact. USB passthrough and flashing are not configured, and no host-side compilation path is provided. Implementation targets RA4M1 only, retaining the official ESP32-S3 firmware.
-
-## Image analysis configuration
-
-Python 3.11+ with NumPy, OpenCV headless, and tqdm. Use the repository's `.venv/bin/python` exclusively, including `.venv/bin/python -m pip` for package operations. Do not search conda or other environments; request authorization before using a system interpreter to create a missing `.venv`. The intended interface is:
+Python uses the project `.venv` exclusively. With dependency installation authorized:
 
 ```sh
-camsync-check --config configs/example.json
+.venv/bin/python -m pip install -e .
+.venv/bin/camsync-check --config configs/two-b0267.json
 ```
 
-This command is a planned interface, not an installed executable. The [single-board example](configs/example.json) and [two-board example](configs/two-b0267.json) use fictional image paths and unknown exposure.
+The CLI automatically locates the R4 matrix, decodes images, and writes an offline HTML report, CSV measurements, JSON summaries, and diagnostic PNGs. Progress goes to stderr; stdout prints the report path. Exit status 0 means processing completed, not that synchronization passed. Invalid measurements remain invalid. Choose a fresh output directory for each run.
 
-Keep two explicit configuration layers:
+## Configure inputs
 
-- **Profiles** describe reusable hardware facts. Built-ins ship inside the Python package: `builtin:b0267` specifies 5120 × 800, single-channel uint8, global shutter, and four horizontal crops; `builtin:uno_r4_wifi` describes the LED target.
-- **Run configuration** selects profiles, ordered image paths, camera/node identities, exposure information, target protocol, and output directory.
+Copy the [single-board example](configs/example.json) or [two-board example](configs/two-b0267.json), replace the fictional image paths, and list your ordered captures. Supply enough different optical phases to observe all 96 LEDs. The short example lists illustrate structure; they do not guarantee enough data for localization.
 
-To use another camera or image layout, supply a complete JSON profile using the same camera schema and replace `"profile": "builtin:b0267"` with `"profile": "./my-camera.json"`. A standalone camera uses one view whose crop covers the whole image. Add sources for additional sequences or nodes. Source `camera_ids` must map every profile view to a globally unique camera ID; view order is not a physical connector identity.
+- **Profiles** define hardware and image layout. `builtin:b0267` describes 5120 × 800 uint8 grayscale images split into four horizontal 1280 × 800 views. `builtin:uno_r4_wifi` defines the target, protocol, and shared scan-order table.
+- **Sources** identify each synchronization board, acquisition node, camera views, and ordered image paths. Camera IDs must be globally unique. Two boards can share a `node_id`. Camera ID mappings describe image slots, not an inferred physical connector mapping.
+- **Comparison** selects two sources, their representative cameras, and explicit zero-based `frame_pairs`. These are the acquisition system's pairs to inspect. Equal file indices are not automatically assumed to mean simultaneous exposures.
+- **Localization** controls how many evenly distributed source frames to inspect (`max_frames`, default example 48). Orientation needs at least `min_valid_frames` informative intervals and an `orientation_margin` advantage over other grid orientations. No ROI coordinates are required.
+- **Analysis** defines background-subtracted on/off thresholds, saturation rejection, allowed missed boundary slots, the offset prior, and an optional `pass_tolerance_us`. `target_resolution_us` limits the conditional pair half-width; it does not certify accuracy.
 
-For two B0267 boards, supply two wide-image sequences, each with its own `sync_board_id` and four camera IDs. `node_id` may be identical when both boards connect to one host. The draft `comparison` selects source IDs and representative cameras. Its explicit `frame_pairs` lists zero-based source-frame index pairs to inspect; the example pairs are illustrative, not an assertion of simultaneous exposure. A future optical-association mode will report inferred pairings separately. Compare representative cameras without silently switching to another camera, while retaining all visible-camera pair results and within-board skew diagnostics.
+All paths resolve relative to the run configuration. A complete user camera profile can replace a built-in reference with a file path, such as `./my-camera.json`; use the same schema as the [B0267 profile](src/camsync_check/profiles/b0267.json). A single camera has one full-image crop. The initial decoder requires global-shutter uint8 grayscale images. Dimensions, dtype, shutter model, and camera identity are never guessed or silently converted.
 
-Profile names use the explicit `builtin:` prefix; other references are file paths. File references, image paths, and the output directory resolve against the run configuration's directory. No profile inheritance, deep merging, filename-based identity inference, automatic resizing, or inferred camera model is planned. Load image values unchanged and require exact configured dimensions, channel count, and dtype. Reject invalid fields, unknown profiles, invalid crops, mismatched view mappings, and unreadable files with their locations.
+Exposure metadata may be `{"value_us": null, "provenance": "unknown"}`. Known values carry `requested`, `reported`, or `calibrated` provenance. Metadata is recorded, not used as an exact exposure constraint. The decoder estimates slot-level exposure boundaries independently for each frame, without brightness fitting or an assumed 4 ms exposure. Optional source `frame_period_us` only scales a drift slope into µs/second; it is not optical ground truth.
 
-Exposure uses microseconds plus `requested`, `reported`, `calibrated`, or `unknown` provenance. `null` means unknown, never zero or a default duration. Source-level exposure describes an explicitly fixed setting; requested/reported values are evidence rather than exact physical constraints. The planned decoder jointly estimates exposure start/end and brightness scale per frame when exposure is unknown, including varying automatic exposure. It must retain ambiguity and uncertainty instead of forcing a numerical result. Accurate metadata is optional; an identifiable optical signal and a justified shutter/intensity model are still required. Built-in B0267 settings do not assume a frame rate or exposure duration.
+## Automatic R4 localization
 
-Board synchronization reports will distinguish exposure-start offset, exposure-duration differences, and midpoint offset. The primary timing metric uses exposure start, so changing exposure duration is not mistaken for a start-timing error.
+Keep the board and cameras stationary and the full matrix visible in every view you want to compare. Across selected frames, the tool computes per-pixel maximum minus minimum brightness to suppress static background, detects bright components, and fits the known 12 × 8 grid with OpenCV. Sampling stays in original image coordinates. The minimum LED spacing is 6 pixels; homography residuals above 20% of horizontal LED pitch are rejected. Keep the target large and in focus, with background separation and modest perspective/lens distortion.
 
-Resolved profiles and run settings must accompany results so the analysis remains traceable. See [measurement design](docs/design.md) for decoding, ambiguity, and reporting requirements.
+The rectangular grid alone cannot distinguish mirrored or reversed numbering. Firmware therefore uses a fixed asymmetric LED permutation, shared with Python through the target profile. The tool selects the orientation whose observed LEDs form contiguous intervals in this scan order. This preserves fixed intervals and the 24 ms cycle; it adds no long-period code or exposure fitting.
 
-## Repository layout and conventions
+Localization requires all 96 positions to appear in the temporal projection and several informative multi-LED intervals. Repeated identical phases, very short or near-cycle exposures, occlusion, motion, saturation, and strong background activity can prevent it. A failed view is explicitly excluded with its reason; its offset never becomes zero. The report includes projection/grid overlays and `localization.json`. No manual ROI or alternative detector is silently substituted.
 
-```text
-.devcontainer/                    Shared firmware environment
-Makefile                          Short host-side container commands
-firmware/                         PlatformIO project and board-specific code
-src/camsync_check/                Analysis library and future CLI
-src/camsync_check/profiles/       Packaged camera and target profiles
-configs/example.json             Example run configuration
-docs/design.md                   Measurement design and primary references
-data/, outputs/, .cache/         Local artifacts, ignored by Git
-```
+## Results
 
-All repository text and commit messages use English. Keep usage/configuration instructions here, development rules in [AGENTS.md](AGENTS.md), and measurement rationale in `docs/design.md`; avoid additional overview documents, duplicate setup guides, and README files for empty directories.
+`report.html` shows the representative-camera offset, observed jitter, coverage, per-camera statistics, and the 4 × 4 cross-board median matrix. Each board also retains its six within-board camera pairs. A representative is never silently replaced. Node-to-node comparison uses the selected cameras' optical offsets, not inferred host-clock error.
 
-Request missing dependencies before installation. Do not run scientific tests, smoke checks, or experiments unless explicitly requested.
+| Artifact | Contents |
+| --- | --- |
+| `frames.csv` | Per-camera validity, first/last scan slots, start/end phase, exposure bounds, modulo phase step |
+| `led_signals.csv` | Background-subtracted signals in physical row-major LED order |
+| `pairs.csv` | Supplied frame associations, offsets, conditional bounds, rejection reasons, optional decisions |
+| `summary.json` | Median, observed jitter SD, P95 residual, range, drift, coverage, versions, limitations |
+| `resolved.json` | Configuration, profiles, and localization snapshot |
+| `localization.json`, `localization/`, `diagnostics/` | Located geometry, orientation evidence, and review images |
 
-The repository retains its [GPL v3 license text](LICENSE).
+Positive offset means the other camera starts exposure later. The default one-slot boundary allowance gives a conditional pair half-width of 500 µs. These are model bounds, not statistical confidence intervals or calibrated hardware accuracy. The 24 ms repetition cannot expose arbitrary whole-cycle/frame errors; the less-than-10-ms prior must come from independent evidence. See [measurement design](docs/design.md).
+
+## Repository conventions
+
+Firmware lives in `firmware/`, with board-specific timer/GPIO code in `firmware/src/boards/`. Python lives in `src/camsync_check/`, packaged profiles alongside it, and run examples in `configs/`. `data/`, `outputs/`, `.venv/`, and build caches are ignored.
+
+All repository text and commits use English. Keep usage here, development rules in [AGENTS.md](AGENTS.md), and rationale in `docs/design.md`. Request missing dependencies before installation. Do not run scientific tests, smoke checks, simulations, or experiments unless explicitly requested. The repository retains its [GPL v3 license text](LICENSE).
