@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "kind": "camera",
+  "model": "Arducam B0267",
+  "image": {
+    "width": 5120,
+    "height": 800,
+    "channels": 1,
+    "dtype": "uint8"
+  },
+  "shutter": "global",
+  "views": [
+    {"id": "view_0", "crop_xywh": [0, 0, 1280, 800]},
+    {"id": "view_1", "crop_xywh": [1280, 0, 1280, 800]},
+    {"id": "view_2", "crop_xywh": [2560, 0, 1280, 800]},
+    {"id": "view_3", "crop_xywh": [3840, 0, 1280, 800]}
+  ]
+}

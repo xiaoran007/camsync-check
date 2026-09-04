@@ -1,40 +1,64 @@
 # camsync-check
 
-An independent optical timing reference and offline analysis tool for measuring actual exposure synchronization across cameras and acquisition nodes.
+MCU-driven LED firmware and an offline Python tool for checking multi-camera exposure synchronization. Users supply images; camera acquisition stays outside this repository.
 
-The first target is **Arduino UNO R4 WiFi**. Firmware uses **VS Code + PlatformIO + C++ with the Arduino framework**. The analysis library uses **Python + OpenCV**, with a planned `camsync-check` CLI.
+**Status:** engineering scaffold. Container definitions and configuration examples exist; firmware, configuration loading, image decoding, and the CLI are not implemented. No timing accuracy has been established.
 
-**Status: design and project initialization.** This repository contains development conventions, design documents, and configuration scaffolding. Firmware, decoding, and the CLI are not implemented; no timing accuracy has been measured.
+## Firmware development
 
-## Scope
+Use Docker with Compose and Make, or VS Code's **Reopen in Container** command. Both paths use the same `.devcontainer/compose.yaml` service and Dockerfile; host PlatformIO is not required.
 
-- Camera-to-camera exposure offset.
-- Optical exposure offset between cameras attached to different nodes.
-- Synchronization jitter, drift, and frame-level timing consistency.
-- Candidate optical slots of 250 µs and 100 µs; slot duration is not measurement accuracy.
-
-All cameras initially observe the same physical LED target. Host timestamps are auxiliary metadata, not optical ground truth. Independently running targets do not automatically share a clock.
-
-Users handle acquisition. This repository accepts saved images and simple input descriptions; it does not integrate camera SDKs, V4L2, Jetson, Raspberry Pi, or another acquisition repository. The first image source is Arducam B0267; see the [input notes](docs/hardware/arducam-b0267-input.md).
-
-## Documentation
-
-- [System design and milestones](docs/design.md)
-- [UNO R4 WiFi hardware evidence](docs/hardware/uno-r4-wifi.md)
-- [Optical protocol and data contract draft](docs/protocol.md)
-- [Development workflow](docs/development.md)
-- [Contributor and agent instructions](AGENTS.md)
-
-## Layout
-
-```text
-firmware/                 PlatformIO project and board-specific firmware
-src/camsync_check/        Python analysis library and future CLI
-profiles/boards/          Optical geometry and board capabilities
-examples/                Image input descriptions
-docs/                     Design, protocol, hardware, and development notes
-data/                    Local captures, ignored by Git
-outputs/                 Local analysis artifacts, ignored by Git
+```sh
+make image                       # Build the firmware environment
+make dev                         # Open a container shell
+make firmware                    # Build the default board
+make firmware BOARD=uno_r4_wifi   # Explicit PlatformIO environment
 ```
 
-The repository retains its existing [GPL v3 license text](LICENSE).
+Inside the container, use `pio run -d firmware -e uno_r4_wifi`. Firmware builds always run in the container. There is no firmware entry point yet, so these build commands cannot produce a firmware image at this stage.
+
+The initial environment uses Debian Bookworm, Linux amd64, PlatformIO Core 6.1.18, and `renesas-ra@1.9.0`. ARM hosts use emulation. First use downloads dependencies inside the container. Artifacts appear in `firmware/.pio/`; packages are cached in `.cache/platformio/`. The base-image tag and transitive dependencies are not fully locked; record resolved versions and image identity at the first authorized build.
+
+Uploading is a separate operation on the resulting artifact. USB passthrough and flashing are not configured, and no host-side compilation path is provided. Implementation targets RA4M1 only, retaining the official ESP32-S3 firmware.
+
+## Image analysis configuration
+
+Python 3.11+ with NumPy, OpenCV headless, and tqdm; use a project virtual environment or conda. The intended interface is:
+
+```sh
+camsync-check --config configs/example.json
+```
+
+This command is a planned interface, not an installed executable. The [example](configs/example.json) uses fictional image paths and unknown exposure.
+
+Keep two explicit configuration layers:
+
+- **Profiles** describe reusable hardware facts. Built-ins ship inside the Python package: `builtin:b0267` specifies 5120 × 800, single-channel uint8, global shutter, and four horizontal crops; `builtin:uno_r4_wifi` describes the LED target.
+- **Run configuration** selects profiles, ordered image paths, camera/node identities, exposure information, target protocol, and output directory.
+
+To use another camera or image layout, supply a complete JSON profile using the same camera schema and replace `"profile": "builtin:b0267"` with `"profile": "./my-camera.json"`. A standalone camera uses one view whose crop covers the whole image. Add sources for additional sequences or nodes. Source `camera_ids` must map every profile view to a globally unique camera ID; view order is not a physical connector identity.
+
+Profile names use the explicit `builtin:` prefix; other references are file paths. File references, image paths, and the output directory resolve against the run configuration's directory. No profile inheritance, deep merging, filename-based identity inference, automatic resizing, or inferred camera model is planned. Load image values unchanged and require exact configured dimensions, channel count, and dtype. Reject invalid fields, unknown profiles, invalid crops, mismatched view mappings, and unreadable files with their locations.
+
+Exposure uses microseconds plus `requested`, `reported`, `calibrated`, or `unknown` provenance. `null` means unknown, never zero. Fixed exposure may be supplied per source; variable exposure requires future explicit per-frame metadata support. Unknown exposure may limit analysis to geometry or ambiguous timing results. Built-in B0267 settings do not assume a frame rate or exposure duration.
+
+Resolved profiles and run settings must accompany results so the analysis remains traceable. See [measurement design](docs/design.md) for decoding, ambiguity, and reporting requirements.
+
+## Repository layout and conventions
+
+```text
+.devcontainer/                    Shared firmware environment
+Makefile                          Short host-side container commands
+firmware/                         PlatformIO project and board-specific code
+src/camsync_check/                Analysis library and future CLI
+src/camsync_check/profiles/       Packaged camera and target profiles
+configs/example.json             Example run configuration
+docs/design.md                   Measurement design and primary references
+data/, outputs/, .cache/         Local artifacts, ignored by Git
+```
+
+All repository text and commit messages use English. Keep usage/configuration instructions here, development rules in [AGENTS.md](AGENTS.md), and measurement rationale in `docs/design.md`; avoid additional overview documents, duplicate setup guides, and README files for empty directories.
+
+Request missing dependencies before installation. Do not run scientific tests, smoke checks, or experiments unless explicitly requested.
+
+The repository retains its [GPL v3 license text](LICENSE).

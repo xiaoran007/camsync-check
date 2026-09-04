@@ -1,118 +1,77 @@
-# System Design
+# Measurement Design
 
-Status: initial design, 2026-09-04. Repository boundaries and structure follow this document; coding schemes and performance claims remain subject to future evidence.
+This document contains measurement rationale and evidence. Usage, configuration selection, and build instructions live in the root README. Firmware and analysis remain unimplemented.
 
-## 1. Recommendation and scope
+## Reference and scope
 
-Use one independent repository containing firmware, board profiles, and an offline analysis library with a CLI. UNO R4 WiFi meets the initial single-board, USB-powered, solderless goal. It is a practical optical reference prototype, but current evidence does not establish 100 µs measurement accuracy.
+All cameras initially observe one stationary UNO R4 WiFi target. Multiple acquisition nodes group cameras; they do not imply multiple independent LED clocks. Non-overlapping views need a separate shared-reference design.
 
-Initially assume a stationary target, fixed cameras, and one physical board visible to all cameras. Multiple nodes mean cameras grouped by acquisition node. Independently running LED boards would introduce separate clock offsets and drift; non-overlapping views need a separate reference-transfer or shared-clock design.
+Images measure exposure relationships. They cannot independently separate operating-system clock error, camera-internal latency, and transport delay. Node results are optical offsets between explicitly selected representative cameras or a documented aggregation.
 
-The tool measures actual exposure relationships. Images alone cannot isolate operating-system clock error, transport latency, and camera-internal delay. A node-level result is explicitly an optical offset from representative cameras or a documented aggregation.
-
-## 2. Measurement pipeline
-
-```mermaid
-flowchart LR
-    A[MCU timer] --> B[Board GPIO sequence]
-    B --> C[Known optical sequence]
-    C --> D[Camera exposure integration]
-    D --> E[User-provided images]
-    E --> F[Geometry and photometry]
-    F --> G[Timing decode and ambiguity analysis]
-    G --> H[Frame association and reports]
-    P[Board and protocol descriptions] --> B
-    P --> F
-    P --> G
+```text
+MCU timer -> GPIO sequence -> LED light -> camera exposure integration
+          -> user-provided images -> geometry/photometry -> timing -> report
 ```
 
-Firmware runs independently of timely host commands. Serial communication may configure, start, stop, and export a run description; USB command arrival does not define exposure ground truth. Record a run ID and treat resets as new segments.
+The firmware runs independently of host scheduling. Serial commands may configure a run, but their arrival times are not ground truth. A reset begins a new run; record firmware/profile/protocol identity and available run metadata.
 
-## 3. Firmware and optical encoding
+## Firmware and encoding
 
-### Timing chain
+Start with a GPT periodic event, a short ISR, and precomputed single-LED source/sink operations. Retain Arduino board support while reviewing FSP/register operations on the critical path. Record clock source, divider, timer counts/channel, interrupt priority, conduction, blanking, and overrun detection limits. ISR latency remains part of the timing chain.
 
-Start with a GPT periodic event, a short ISR, and precomputed GPIO source/sink operations. Retain Arduino framework startup and upload support; use reviewed FSP or register operations on the critical path. Record timer channel, clock source, divider, period counts, interrupt priority, and blanking duration.
+At most one LED is driven per slot. Disable the previous pair before enabling the next, preserve unrelated pins, and review electrical limits for scanning and slow localization. Do not extrapolate scan duty cycles to continuous illumination. DTC/DMAC optimizations require separate evidence and are not initial commitments.
 
-This chain includes interrupt latency; it is not direct hardware-timed GPIO output. DTC/DMAC/event-driven operations are possible future investigations, subject to checking multi-port writes, direction changes, and trigger support. Do not promise arbitrary LED switching without jitter.
+The official matrix implementation advances one of 96 LEDs per 10 kHz timer interrupt. A nominal 100 µs slot therefore gives a 9.6 ms full scan, not a simultaneously updated 96-bit timestamp. Physical orientation must be established during localization.
 
-Illuminate at most one LED per slot. Disable the previous pair and keep unrelated matrix pins high-impedance before enabling the next pair. The optical model must include actual conduction and blanking windows. Startup, shutdown, and errors are explicitly outside valid measurement operation.
+| Stage | Encoding | Result and limitation |
+| --- | --- | --- |
+| v0 | Fixed 96-LED sweep, initially 250 µs, later 100 µs | Within-cycle phase; 24 ms / 9.6 ms periods leave whole-cycle ambiguity |
+| v1 candidate | Precisely specified long-period single-LED position sequence, jointly decoded over frames | Full offsets only if competing epochs are distinguishable under exposure integration |
 
-The official 10 kHz driver advances one LED per interrupt, taking approximately 9.6 ms for 96 LEDs. Its framebuffer must not be treated as a simultaneously updated 96-bit time code. See [hardware evidence](hardware/uno-r4-wifi.md).
+For example, 0.2 ms and 9.8 ms offsets can share phase in a 9.6 ms sweep. Label v0 results `phase_only`; never use them to claim absence of whole-frame errors. A long-period pseudorandom sequence is a candidate, not a proven solution: integration discards event order. Freeze generation rules, seed, period, optical start identification, search range, and observation requirements only after establishing identifiability. Do not invent epochs or guess ambiguous matches.
 
-### Encoding progression
+## Image model and decoding
 
-| Stage | Candidate | Deliverable | Limitation |
-| --- | --- | --- | --- |
-| v0 readability prototype | Fixed 96-LED sweep, initially 250 µs/slot, later 100 µs/slot | Exposure-covered positions, within-cycle phase differences, quality diagnostics | Periods of 24 ms / 9.6 ms cannot distinguish whole-cycle offsets |
-| v1 measurement protocol | Precisely specified long-period single-LED sequence, jointly decoded across frames | Shared epoch, frame associations, and complete offsets when identifiable | Exposure integration discards event order; a long period alone does not guarantee identifiability |
+Camera profiles explicitly define dimensions, channels, dtype, shutter type, and crops. The run configuration supplies paths, identity mappings, and exposure provenance. Unknown or inconsistent settings are not guessed.
 
-v0 outputs must be labeled phase-only or represented as candidate sets. For example, offsets of 0.2 ms and 9.8 ms can have the same phase under a 9.6 ms cycle. A phase match cannot prove absence of whole-frame errors.
+Use a slow localization sequence or explicit corners and orientation to establish the grid. High-speed frames need not show all corners. Correct significant distortion using supplied intrinsics; preserve original sensor coordinates. Estimate background and per-LED responses from suitable calibration images, then extract unsaturated intensities.
 
-Before v1 implementation, define generation rules, seed/state, period, optical start identification, observation requirements, and search bounds. A candidate is a constrained pseudorandom sequence of LED positions with controlled duty cycles. Do not select an unexamined LFSR polynomial during initialization. Establish whether exposure-integrated vectors and multi-frame observations reject competing epochs over the intended operating range. If they do not, revise the protocol rather than guessing in the decoder.
-
-Long exposures can erase phase information when they cover complete repeated cycles. Very short exposures may reveal only one LED without identifying a position within its slot. Initially use fixed exposure and gain, capturing several slots while retaining useful boundary information; choose actual settings from camera metadata and optical readability.
-
-## 4. Offline CV analysis
-
-Use Python 3.11+, NumPy, OpenCV headless, and tqdm. Use standard-library argparse and JSON input descriptions. Users supply images as independent camera sequences or explicitly cropped views of composite images. Do not integrate camera SDKs, device control, or another acquisition repository. Video-container input requires a later explicit request.
-
-Processing stages:
-
-1. Read the input manifest, camera/node membership, ordered frames, exposure information, and board/protocol identifiers.
-2. Obtain a complete grid from a separate slow localization sequence. Initially allow explicit corners and orientation; a high-speed image need not show all corners.
-3. Sample LED regions using a planar mapping while retaining original sensor coordinates. Significant lens distortion requires existing intrinsic calibration.
-4. Estimate background, per-LED response, and noise from dark and slow illumination captures. Extract unsaturated intensities; avoid reducing partial exposures to binary observations.
-5. Fit exposure integration to obtain start/midpoint estimates, feasible intervals, or competing candidates. Record residuals, ambiguity, and rejection reasons.
-6. Associate frames monotonically using optical time and explicit correspondence constraints. Do not hide whole-frame offsets with unrestricted nearest-time pairing.
-7. Stream per-frame results and aggregate camera/node metrics, quality diagnostics, and a report with progress feedback.
-
-Add `io`, `geometry`, `photometry`, `decode`, `metrics`, `report`, and `cli` modules as functionality is implemented. Avoid empty interface layers and speculative plugin discovery. Start with explicit board selection; abstract shared behavior when a second board provides concrete requirements.
-
-## 5. Exposure model
-
-For LED j under global shutter, use the initial model:
+For a global-shutter observation of LED j:
 
 ```text
 I_j = background_j + gain_j * integral(L_j(t), t_start, t_start + exposure) + noise_j
 ```
 
-The sequence and board conduction windows define `L_j(t)`. Prefer known exposure duration. Joint exposure estimation is permitted only when identifiable, with separate uncertainty reporting. The model assumes unsaturated, calibrated response; ISP processing, gamma, and compression can violate that assumption.
+`L_j(t)` includes the actual conduction window. Prefer known exposure. Estimate exposure jointly only when identifiable; unknown values may produce only feasible intervals or an inconclusive result. Saturation, gamma, compression, and automatic exposure affect the model. Long exposures can erase repeated-cycle phase; short exposures may identify a slot without resolving its interior.
 
-Rolling shutter assigns different exposure start times to different sensor rows. Initially prioritize quantitative global-shutter support. Rolling-shutter inputs may receive diagnostics; corrected quantitative results require known or calibrated line timing and direction:
+Prioritize global-shutter inputs. Rolling-shutter quantitative results require known/calibrated line timing and scan direction: `t_start(y) = t_start(y_ref) + (y - y_ref) * line_time`. Account for ROI offsets, rotation, and resizing, and use column coordinates for column-scanning sensors. Otherwise report unsupported timing rather than applying a global-shutter model.
 
-```text
-t_start(y) = t_start(y_ref) + (y - y_ref) * line_time
-```
+Associate frames monotonically using optical evidence and explicit correspondence constraints. A source frame containing multiple views defines a group to inspect, not proof of simultaneity. Preserve user-supplied groups separately from inferred matches; unrestricted nearest-time matching must not hide whole-frame offsets. Unordered batches support individual observations, not continuous jitter or drift estimates.
 
-Preserve sensor coordinates, ROI offsets, and reference-row definitions through rotation, cropping, and resizing. Use column coordinates where the sensor scans by column. See [Basler Electronic Shutter Types](https://docs.baslerweb.com/electronic-shutter-types).
+## Metrics and reporting
 
-## 6. Metrics and decisions
+Default to exposure midpoint. Define `delta_ab = t_b - t_a`, positive when B exposes later. Report median offset, sample standard deviation and P95 absolute residual after median removal, peak-to-peak residual range, and sample counts. Fit drift separately; detrended jitter supplements original statistics. Report optical inter-frame intervals and missing/duplicate/unmatched candidates without treating file indices as hardware counters.
 
-Default to exposure midpoint; exposure-start analysis is an explicit option. For matched frames, `delta_ab = t_b - t_a`; positive values mean B exposes later than A.
+Report cross-node camera pairs before representative-camera node summaries. Aggregation must state its method and prerequisites. MCU ticks and nominal microseconds remain distinguishable; an uncalibrated oscillator is not a traceable absolute clock. Camera agreement or internal MCU timing alone cannot establish 100 µs accuracy.
 
-- **Offset:** median pairwise delta, retaining every valid frame-level value.
-- **Jitter:** sample standard deviation, P95 absolute residual, and peak-to-peak range after subtracting median delta. Report sample counts; insufficient samples do not yield a fabricated standard deviation.
-- **Drift:** separately fit delta against optical time. Detrended jitter supplements, rather than replaces, original statistics.
-- **Frame consistency:** optical inter-frame intervals, residuals against an explicitly specified expected interval, missing/duplicate/unmatched candidates, and anomalous segments. File indices are not hardware frame counters.
-- **Node offset:** report cross-node camera pairs first. Default node summaries use explicitly selected representative cameras. Aggregate only with established camera relationships and a documented method.
+Planned artifacts are `frames.csv`, `pairs.csv`, `summary.json`, and an offline `report.html`. Include resolved configuration/profile snapshots, versions, frame associations, feasible intervals, rejection reasons, valid coverage, and limits. Call intervals confidence intervals only with a justified statistical model. Shared reference errors need not be independent.
 
-Results use `pass`, `fail`, or `inconclusive` when user-supplied criteria exist. Slot duration is not an acceptance threshold. Decisions require adequate coverage, observation span, and uncertainty. Periodic ambiguity or unknown rolling-shutter timing cannot yield a pass.
+Acceptance criteria are user-supplied; a 250 µs slot is not a pass threshold. Use `pass`, `fail`, or `inconclusive` only with defined criteria and adequate coverage/uncertainty. Missing measurements never become 0 µs. Routine use requires no extra electronics; externally calibrated accuracy claims may require a separate calibration campaign.
 
-Frame pairing must preserve both user-supplied capture groups and algorithm-inferred associations. A supplied group is a synchronization claim to measure, not proof of simultaneous exposure. Do not optimize away the offsets being evaluated.
+## Initial B0267 evidence
 
-## 7. Accuracy evidence and milestones
+At the user's request, `bapd8_acquisition` was inspected read-only on 2026-09-04 at HEAD `b44b38b86d96990898676464ad7de7ef06ce0d0a`. Relevant records: `docs/hardware_b0267_camera_kit.md`, `docs/hardware_jetson_orin_nano.md`, and `rpi/capture_sync_frame_pair.py`. They are provenance, not runtime dependencies.
 
-Retain MCU ticks and nominal microsecond conversion. Mark uncalibrated clock scales explicitly. Timer period, ISR latency, optical conduction, image response, and decoding error are distinct error sources. Internal MCU timing or agreement between cameras alone does not establish externally traceable absolute accuracy.
+That project records four monochrome global-shutter OV9281 sensors, a 5120 × 800 GREY composite with four 1280 × 800 horizontal views, and an observed mode near 44.972 fps. Physical connector-to-slot mapping is unverified. The Jetson `exposure=681` control has unresolved units; it must not become 681 µs. An RPi script requests 4000 µs, which is not evidence of actual exposure for another dataset. At an actual 4 ms exposure, 250 µs slots span roughly 16 slot durations and require integration-based decoding.
 
-Routine use requires no oscilloscope or photodiode. A later claim of calibrated absolute accuracy may require separate external calibration. Without it, describe an uncalibrated prototype and observed repeatability. Future validation activities below require the user's explicit authorization under project conventions.
+Its phone-display check found no visible internal offset at approximately 8.33–10 ms method resolution, not sub-ms proof. The built-in profile describes only the confirmed wide-image mode; other modes need explicit profiles.
 
-| Milestone | Deliverable | Evidence needed to proceed |
-| --- | --- | --- |
-| M0: initialization | Design, conventions, layout, configuration scaffolding | Traceable documentation and explicit implementation status |
-| M1 | Slow localization, 250 µs single-LED sweep, run description | Actual images resolve LEDs; GPIO and duty cycles are reviewed |
-| M2 | Manual geometry, photometry, v0 phase decoding | Real-image results have interpretable intervals and rejection reasons |
-| M3 | Frozen v1 protocol, epoch decoding, multi-camera CLI and reports | Whole-cycle/frame ambiguity is resolved under stated conditions |
-| M4 | 100 µs mode, rolling-shutter support, performance improvements | Coverage and error evidence for supported cameras and exposures |
+## Next steps and references
 
-The first image source is Arducam B0267 with four monochrome global-shutter OV9281 sensors. Existing records include 5120 × 800 composite frames and a measured mode around 44.972 fps. See [B0267 input notes](hardware/arducam-b0267-input.md). Actual exposure, target image size, frame correspondence, and shared visibility still depend on the supplied dataset.
+Implement slow localization and the 250 µs sweep, then image geometry/photometry and v0 phase decoding. Establish a distinguishable v1 sequence before full offset reports. Add 100 µs operation and rolling-shutter support only with appropriate evidence. Execute scientific validation only when explicitly requested.
+
+- [UNO R4 WiFi hardware](https://docs.arduino.cc/hardware/uno-r4-wifi/), [schematic](https://docs.arduino.cc/resources/schematics/ABX00087-schematics.pdf), and [datasheet](https://docs.arduino.cc/resources/datasheets/ABX00087-datasheet.pdf).
+- [ArduinoCore-renesas 1.6.0 LED mapping/scanner](https://github.com/arduino/ArduinoCore-renesas/blob/1.6.0/libraries/Arduino_LED_Matrix/src/Arduino_LED_Matrix.h) and [board pin mapping](https://github.com/arduino/ArduinoCore-renesas/blob/1.6.0/variants/UNOWIFIR4/variant.cpp).
+- [RA4M1 Hardware Manual](https://www.renesas.com/en/document/mah/renesas-ra4m1-group-users-manual-hardware): I/O ports, GPT, and AGT.
+- [PlatformIO board support](https://docs.platformio.org/en/latest/boards/renesas-ra/uno_r4_wifi.html) and [renesas-ra 1.9.0 package manifest](https://github.com/platformio/platform-renesas-ra/blob/v1.9.0/platform.json). Compare installed packages with referenced source at the first authorized build.
+- [Arducam OV9281](https://docs.arducam.com/Raspberry-Pi-Camera/Native-camera/Global-Shutter/1MP-OV9281-OV9282/) and [Basler shutter timing](https://docs.baslerweb.com/electronic-shutter-types).

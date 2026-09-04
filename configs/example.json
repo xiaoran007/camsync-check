@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "target": {
+    "profile": "builtin:uno_r4_wifi",
+    "protocol": "sweep96-v0",
+    "slot_us": 250
+  },
+  "sources": [
+    {
+      "id": "wide_0",
+      "node_id": "node_0",
+      "profile": "builtin:b0267",
+      "camera_ids": {
+        "view_0": "camera_0",
+        "view_1": "camera_1",
+        "view_2": "camera_2",
+        "view_3": "camera_3"
+      },
+      "frames": [
+        "../data/example/frame_000001.png",
+        "../data/example/frame_000002.png"
+      ],
+      "exposure": {"value_us": null, "provenance": "unknown"}
+    }
+  ],
+  "output": "../outputs/example"
+}
