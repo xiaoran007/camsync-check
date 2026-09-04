@@ -22,6 +22,7 @@
 ## Firmware
 
 - Normally program only RA4M1, retaining the official ESP32-S3 firmware. Use VS Code / PlatformIO; do not require Arduino IDE.
+- Build firmware only in the shared Dev Container environment. Use the root Makefile from the host; do not introduce a second native build path. Flashing is a separate hardware operation.
 - Keep board-specific GPIO, timer, and pin mappings under `firmware/src/boards/<board_id>/`.
 - Use hardware timers as the timing basis. ISR work must be bounded and precomputed where possible; no delays, serial output, dynamic allocation, or blocking operations.
 - Never run the official matrix scanner alongside the custom driver. Modify only matrix-related GPIO bits and preserve other peripherals.

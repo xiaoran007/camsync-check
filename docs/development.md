@@ -14,9 +14,9 @@ Target Python 3.11+. Check project `.venv` / `venv` first, then conda environmen
 
 `pyproject.toml` declares NumPy, OpenCV headless, and tqdm. Use standard-library argparse for the CLI. Dependency ranges are provisional; there is no validated lockfile. At the first authorized environment setup, resolve and record exact package versions, Python, and OS, then adopt a lockfile. Do not manufacture an unresolved lockfile or claim full reproducibility now.
 
-The PlatformIO project lives in `firmware/`, initially using `renesas-ra@1.9.0`. Open that directory as the PlatformIO project in VS Code. There is no `main.cpp` yet; do not add empty `setup()` / `loop()` functions to suggest functional firmware exists.
+Firmware builds run in the Dev Container defined by `.devcontainer/`. VS Code and Make share its Compose service, Dockerfile, workspace mount, and PlatformIO cache. The environment uses Linux amd64 (emulated on ARM hosts), Debian Bookworm, and PlatformIO Core 6.1.18. Run `make image` to build the environment, `make dev` for a container shell, and `make firmware` to compile. Docker with Compose is the only command-line container prerequisite; no separate Dev Container CLI is required.
 
-At the first authorized build, record PlatformIO Core, framework, FSP, compiler, and board versions. A pinned platform does not pin every transitive package. Once firmware exists, the intended build command is `pio run -d firmware -e uno_r4_wifi`; uploading additionally uses `-t upload`. These commands have not been executed during initialization.
+The PlatformIO project lives in `firmware/`, initially using `renesas-ra@1.9.0`. There is no `main.cpp` yet, so the build entry point cannot produce firmware. Dependencies download inside the container on first use. Build artifacts remain under `firmware/.pio/`, with PlatformIO packages under `.cache/platformio/`. At the first authorized build, record resolved framework, FSP, compiler, and image identity; tags and dependency ranges do not establish a bit-for-bit reproducible build. Uploading is a separate hardware task; the build container does not expose USB or rebuild on the host. These build commands have not been executed.
 
 ## Code organization
 

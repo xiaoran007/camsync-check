@@ -1,6 +1,6 @@
 {
   "recommendations": [
-    "platformio.platformio-ide",
+    "ms-vscode-remote.remote-containers",
     "ms-python.python"
   ]
 }

@@ -1,0 +1,13 @@
+services:
+  firmware:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile
+    init: true
+    working_dir: /workspace
+    environment:
+      PLATFORMIO_CORE_DIR: /workspace/.cache/platformio
+    volumes:
+      - ..:/workspace
+    command: sleep infinity

@@ -1,0 +1,17 @@
+{
+  "name": "camsync-check firmware",
+  "dockerComposeFile": "compose.yaml",
+  "service": "firmware",
+  "workspaceFolder": "/workspace",
+  "remoteUser": "vscode",
+  "shutdownAction": "stopCompose",
+  "customizations": {
+    "vscode": {
+      "extensions": ["platformio.platformio-ide"],
+      "settings": {
+        "platformio-ide.useBuiltinPIOCore": false,
+        "platformio-ide.customPATH": "/opt/platformio/bin"
+      }
+    }
+  }
+}
