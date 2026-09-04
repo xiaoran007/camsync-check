@@ -23,13 +23,13 @@ Uploading is a separate operation on the resulting artifact. USB passthrough and
 
 ## Image analysis configuration
 
-Python 3.11+ with NumPy, OpenCV headless, and tqdm; use a project virtual environment or conda. The intended interface is:
+Python 3.11+ with NumPy, OpenCV headless, and tqdm. Use the repository's `.venv/bin/python` exclusively, including `.venv/bin/python -m pip` for package operations. Do not search conda or other environments; request authorization before using a system interpreter to create a missing `.venv`. The intended interface is:
 
 ```sh
 camsync-check --config configs/example.json
 ```
 
-This command is a planned interface, not an installed executable. The [example](configs/example.json) uses fictional image paths and unknown exposure.
+This command is a planned interface, not an installed executable. The [single-board example](configs/example.json) and [two-board example](configs/two-b0267.json) use fictional image paths and unknown exposure.
 
 Keep two explicit configuration layers:
 
@@ -37,6 +37,8 @@ Keep two explicit configuration layers:
 - **Run configuration** selects profiles, ordered image paths, camera/node identities, exposure information, target protocol, and output directory.
 
 To use another camera or image layout, supply a complete JSON profile using the same camera schema and replace `"profile": "builtin:b0267"` with `"profile": "./my-camera.json"`. A standalone camera uses one view whose crop covers the whole image. Add sources for additional sequences or nodes. Source `camera_ids` must map every profile view to a globally unique camera ID; view order is not a physical connector identity.
+
+For two B0267 boards, supply two wide-image sequences, each with its own `sync_board_id` and four camera IDs. `node_id` may be identical when both boards connect to one host. The draft `comparison` selects source IDs and representative cameras. Its explicit `frame_pairs` lists zero-based source-frame index pairs to inspect; the example pairs are illustrative, not an assertion of simultaneous exposure. A future optical-association mode will report inferred pairings separately. Compare representative cameras without silently switching to another camera, while retaining all visible-camera pair results and within-board skew diagnostics.
 
 Profile names use the explicit `builtin:` prefix; other references are file paths. File references, image paths, and the output directory resolve against the run configuration's directory. No profile inheritance, deep merging, filename-based identity inference, automatic resizing, or inferred camera model is planned. Load image values unchanged and require exact configured dimensions, channel count, and dtype. Reject invalid fields, unknown profiles, invalid crops, mismatched view mappings, and unreadable files with their locations.
 

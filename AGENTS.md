@@ -11,7 +11,7 @@
 ## Environment and execution
 
 - Build firmware only in the shared `.devcontainer/` environment; use the root Makefile from the host. Flashing is separate from compilation. Normally program RA4M1 only and retain official ESP32-S3 firmware.
-- Before running Python, check project `.venv` / `venv` first, then conda. Record the selected interpreter's absolute path. Always ask before using system Python; do not bypass this through wrappers or shebangs.
+- Use only the project `.venv/bin/python` for Python work and `.venv/bin/python -m pip` for package operations. Do not search conda or other environments. If `.venv` is missing, request authorization before bootstrapping it with a system interpreter; do not silently fall back to system Python.
 - Request missing dependency installation rather than installing automatically or substituting another implementation. Container dependency declarations are not evidence of a successful build.
 - Do not write or run tests, local smoke checks, simulations, or benchmarks without an explicit user request. Document/diff review and declarative configuration inspection are permitted.
 - Provide granular stderr progress for long image-processing operations. Keep machine-readable results on stdout or in files; never log inside an MCU ISR.
@@ -22,6 +22,7 @@
 - Never run the official matrix scanner alongside the custom driver. Preserve unrelated GPIO bits and establish safe high-impedance transitions, source/sink polarity, and duty cycles from hardware evidence.
 - Keep analysis in `src/camsync_check/`, with thin CLI orchestration. Use explicit JSON run settings and complete profiles, including packaged built-ins and user-provided files. Never infer image dimensions, camera identity, or pixel format.
 - Treat the MCU target and input camera as different profile kinds. Keep Python-package profiles and firmware board IDs consistent. Record resolved profiles in analysis outputs.
+- Support two B0267 synchronization boards as separate sources, each with four camera views. Keep synchronization-board identity separate from acquisition-node identity; two boards may share one node. Do not assume the four views have zero optical skew or infer cross-board frame pairing from equal file indices.
 - Prefer standard-library facilities; planned dependencies are NumPy, OpenCV headless, and tqdm. Add modules as functionality appears, not as empty abstractions.
 - Use Python type annotations, four-space code indentation, explicit firmware integer widths, and time-unit suffixes. Make recipes use tabs.
 
