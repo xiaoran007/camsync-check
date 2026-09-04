@@ -30,6 +30,7 @@
 
 - Separate slot duration, optical timing error, MCU clock-scale error, decoder uncertainty, and measured accuracy. Host timestamps and frame numbers are not optical ground truth.
 - Preserve the offset and drift being measured. Report ambiguity, saturation, missing frames, unknown exposure, and unsupported shutter timing explicitly; never fill invalid results with zero offset.
+- Never supply an assumed exposure duration when metadata is missing. Unknown exposure and frame gain must be treated as per-frame estimation variables with identifiability checks. Distinguish start-time offset from midpoint offset and propagate exposure uncertainty into synchronization results.
 - State the estimated exposure instant, valid coverage, rejection reasons, and uncertainty sources. Version configurations and protocols when their semantics change.
 - Keep captures, private settings, and generated results out of Git. Add example images only with explicit authorization.
 - Preserve upstream attribution and licensing; record source versions when importing hardware mappings or code.

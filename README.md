@@ -42,7 +42,9 @@ For two B0267 boards, supply two wide-image sequences, each with its own `sync_b
 
 Profile names use the explicit `builtin:` prefix; other references are file paths. File references, image paths, and the output directory resolve against the run configuration's directory. No profile inheritance, deep merging, filename-based identity inference, automatic resizing, or inferred camera model is planned. Load image values unchanged and require exact configured dimensions, channel count, and dtype. Reject invalid fields, unknown profiles, invalid crops, mismatched view mappings, and unreadable files with their locations.
 
-Exposure uses microseconds plus `requested`, `reported`, `calibrated`, or `unknown` provenance. `null` means unknown, never zero. Fixed exposure may be supplied per source; variable exposure requires future explicit per-frame metadata support. Unknown exposure may limit analysis to geometry or ambiguous timing results. Built-in B0267 settings do not assume a frame rate or exposure duration.
+Exposure uses microseconds plus `requested`, `reported`, `calibrated`, or `unknown` provenance. `null` means unknown, never zero or a default duration. Source-level exposure describes an explicitly fixed setting; requested/reported values are evidence rather than exact physical constraints. The planned decoder jointly estimates exposure start/end and brightness scale per frame when exposure is unknown, including varying automatic exposure. It must retain ambiguity and uncertainty instead of forcing a numerical result. Accurate metadata is optional; an identifiable optical signal and a justified shutter/intensity model are still required. Built-in B0267 settings do not assume a frame rate or exposure duration.
+
+Board synchronization reports will distinguish exposure-start offset, exposure-duration differences, and midpoint offset. The primary timing metric uses exposure start, so changing exposure duration is not mistaken for a start-timing error.
 
 Resolved profiles and run settings must accompany results so the analysis remains traceable. See [measurement design](docs/design.md) for decoding, ambiguity, and reporting requirements.
 

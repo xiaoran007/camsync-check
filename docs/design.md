@@ -41,10 +41,22 @@ Implementation proceeds from a configured wide-image crop to a per-camera target
 For a global-shutter observation of LED j:
 
 ```text
-I_j = background_j + gain_j * integral(L_j(t), t_start, t_start + exposure) + noise_j
+I_j = background_j + frame_gain * response_j * integral(L_j(t), t_start, t_end) + noise_j
 ```
 
-`L_j(t)` includes the actual conduction window. Prefer known exposure. Estimate exposure jointly only when identifiable; unknown values may produce only feasible intervals or an inconclusive result. Saturation, gamma, compression, and automatic exposure affect the model. Long exposures can erase repeated-cycle phase; short exposures may identify a slot without resolving its interior.
+`L_j(t)` includes the actual conduction window; `response_j` is a calibrated per-LED response. Estimate exposure start, end, and frame gain jointly when exposure is unknown, separately for every frame. Report exposure as `t_end - t_start`. Requested or reported exposure values are supporting evidence, not exact constraints; calibrated values require a stated tolerance. Never insert a default 4 ms exposure or equate nominal frame period with exposure duration.
+
+### Unknown exposure and identifiability
+
+For a sweep observed within less than one cycle, visible LED identities constrain the start/end slots. After response correction, fully covered pulses can establish the frame's brightness scale, while partially covered boundary pulses constrain positions within their slots. This can recover exposure duration without camera metadata, provided the signal is linear, unsaturated, and sufficiently informative. Merely counting illuminated LEDs does not recover boundary fractions. Blanking and incomplete pulse coverage must remain in the fitted model.
+
+Search feasible start/end windows and account for nuisance gain and calibrated background uncertainty. Keep competing epochs and duration hypotheses. Evaluate timing intervals after allowing these nuisance variables to vary, rather than returning only an optimizer's best fit. Accept a numerical synchronization claim only when candidate ambiguity and interval width meet the requested measurement tolerance. Report the supported search domain; a solution at its boundary is not evidence that longer exposures have been ruled out.
+
+Reject or mark inconclusive observations with indistinguishable windows, unresolved gain/exposure tradeoffs, missing boundary information, saturation, or unsupported image formation. An exposure wholly inside one LED pulse cannot locate its start from that LED's brightness alone. A complete repeated-cycle exposure may erase phase information. More frames may reject epoch aliases, but must not impose constant exposure or smooth away timing jitter. Exposure can change on every frame under automatic control.
+
+Sub-slot brightness fitting requires a calibrated or justified intensity response. Unknown gamma/tone mapping cannot be absorbed into a single gain; unmodeled HDR or temporal frame blending may invalidate a single rectangular exposure window. A small fitting residual alone does not certify the image-formation model. Record these assumptions and withhold sub-ms accuracy claims for unvalidated pipelines. Lack of accurate exposure metadata is distinct from lack of a valid shutter/photometric model.
+
+The v1 sequence must be distinguishable across a range of unknown exposure durations and gains, not only at one assumed duration. Its operating envelope remains to be established. If existing images erase the timing information, a new capture with a more suitable slot schedule or acquisition setting is required; the checker does not silently change settings or invent lost information.
 
 Prioritize global-shutter inputs. Rolling-shutter quantitative results require known/calibrated line timing and scan direction: `t_start(y) = t_start(y_ref) + (y - y_ref) * line_time`. Account for ROI offsets, rotation, and resizing, and use column coordinates for column-scanning sensors. Otherwise report unsupported timing rather than applying a global-shutter model.
 
@@ -52,7 +64,7 @@ Associate frames monotonically using optical evidence and explicit correspondenc
 
 ## Metrics and reporting
 
-Default to exposure midpoint. Define `delta_ab = t_b - t_a`, positive when B exposes later. Report median offset, sample standard deviation and P95 absolute residual after median removal, peak-to-peak residual range, and sample counts. Fit drift separately; detrended jitter supplements original statistics. Report optical inter-frame intervals and missing/duplicate/unmatched candidates without treating file indices as hardware counters.
+Use exposure-start offset as the primary board synchronization metric, and report exposure duration and midpoint offset separately when identifiable. Define `delta_ab = t_b - t_a`, positive when B exposes later, always identifying the time feature used. Since `delta_mid = delta_start + (exposure_B - exposure_A) / 2`, differing exposures must not be mislabeled as a start-timing error. Propagate feasible exposure-window sets into pairwise offset bounds rather than treating estimated exposure as exact. Report median offset, sample standard deviation and P95 absolute residual after median removal, peak-to-peak residual range, and sample counts. Fit drift separately; detrended jitter supplements original statistics. Report optical inter-frame intervals and missing/duplicate/unmatched candidates without treating file indices as hardware counters. Observed jitter includes decoder uncertainty and must not be presented as isolated hardware jitter.
 
 Report cross-node camera pairs before representative-camera node summaries. Aggregation must state its method and prerequisites. MCU ticks and nominal microseconds remain distinguishable; an uncalibrated oscillator is not a traceable absolute clock. Camera agreement or internal MCU timing alone cannot establish 100 µs accuracy.
 
