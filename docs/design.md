@@ -1,116 +1,118 @@
-# 总体方案
+# System Design
 
-状态：2026-09-04 初步设计。工程边界与目录采用本文；编码和性能指标仍需实际采集验证。
+Status: initial design, 2026-09-04. Repository boundaries and structure follow this document; coding schemes and performance claims remain subject to future evidence.
 
-## 1. 建议与适用边界
+## 1. Recommendation and scope
 
-采用一个独立仓库，包含固件、板型描述和离线分析工具。UNO R4 WiFi 满足单板、USB 供电、无需 PCB/焊接的首版目标；它适合做光学时间参考原型，但现有证据不足以承诺 100 µs 实测精度。
+Use one independent repository containing firmware, board profiles, and an offline analysis library with a CLI. UNO R4 WiFi meets the initial single-board, USB-powered, solderless goal. It is a practical optical reference prototype, but current evidence does not establish 100 µs measurement accuracy.
 
-第一版覆盖静止标靶、固定机位、多相机共同看到同一块板的采集。多节点是相机按采集节点分组，而不是各节点使用独立自由运行的 LED 板。无法共视时，需要独立的跨板同步或桥接观测设计，暂不纳入首版。
+Initially assume a stationary target, fixed cameras, and one physical board visible to all cameras. Multiple nodes mean cameras grouped by acquisition node. Independently running LED boards would introduce separate clock offsets and drift; non-overlapping views need a separate reference-transfer or shared-clock design.
 
-工具测量的是**实际曝光时间关系**。它不能仅凭照片分离节点操作系统时钟误差、传输延迟和相机内部延迟；报告中的 node offset 是指定代表相机或明确聚合后的光学偏差。
+The tool measures actual exposure relationships. Images alone cannot isolate operating-system clock error, transport latency, and camera-internal delay. A node-level result is explicitly an optical offset from representative cameras or a documented aggregation.
 
-## 2. 从光学参考到报告
+## 2. Measurement pipeline
 
 ```mermaid
 flowchart LR
-    A[MCU timer] --> B[板级 GPIO 时序]
-    B --> C[已知 LED 光学序列]
-    C --> D[各相机曝光积分]
-    D --> E[帧文件与采集描述]
-    E --> F[几何校准与光强提取]
-    F --> G[时序解码与歧义判断]
-    G --> H[跨相机关联与统计报告]
-    P[板型与编码描述] --> B
+    A[MCU timer] --> B[Board GPIO sequence]
+    B --> C[Known optical sequence]
+    C --> D[Camera exposure integration]
+    D --> E[User-provided images]
+    E --> F[Geometry and photometry]
+    F --> G[Timing decode and ambiguity analysis]
+    G --> H[Frame association and reports]
+    P[Board and protocol descriptions] --> B
     P --> F
     P --> G
 ```
 
-固件不依赖主机及时发命令。串口只承担配置、启动/停止及运行描述导出；USB 命令到达时间不定义曝光真值。每次运行记录 run ID，复位后重新开始并分段处理。
+Firmware runs independently of timely host commands. Serial communication may configure, start, stop, and export a run description; USB command arrival does not define exposure ground truth. Record a run ID and treat resets as new segments.
 
-## 3. 固件与编码路线
+## 3. Firmware and optical encoding
 
-### 3.1 可解释的时序链
+### Timing chain
 
-优先实现 GPT 周期事件 → 短 ISR → 预计算的 GPIO source/sink 操作。Arduino framework 提供板级启动与上传支持，关键路径使用经核对的 FSP / 寄存器操作。timer 通道、时钟源、分频、计数周期、中断优先级、blanking 时间均写入运行描述。
+Start with a GPT periodic event, a short ISR, and precomputed GPIO source/sink operations. Retain Arduino framework startup and upload support; use reviewed FSP or register operations on the critical path. Record timer channel, clock source, divider, period counts, interrupt priority, and blanking duration.
 
-这仍包含中断响应延迟，不等于 timer 直接硬件输出。DTC/DMAC/事件链仅作为未来专项优化：必须先核对多端口写入、方向切换与触发机制，不能预先承诺任意 LED 的零抖动切换。
+This chain includes interrupt latency; it is not direct hardware-timed GPIO output. DTC/DMAC/event-driven operations are possible future investigations, subject to checking multi-port writes, direction changes, and trigger support. Do not promise arbitrary LED switching without jitter.
 
-每个时隙最多点亮一颗 LED，切换前先关闭上一颗并使无关脚保持高阻。光学模型包含实际导通时间和短暂 blanking。停止、异常和启动过程具有明确的非测量状态。
+Illuminate at most one LED per slot. Disable the previous pair and keep unrelated matrix pins high-impedance before enabling the next pair. The optical model must include actual conduction and blanking windows. Startup, shutdown, and errors are explicitly outside valid measurement operation.
 
-官方 10 kHz 驱动每次中断扫描一颗 LED，96 颗一轮约为 9.6 ms；因此不使用动画 framebuffer 作为同时更新的 96 bit 时间码。依据见[硬件核对](hardware/uno-r4-wifi.md)。
+The official 10 kHz driver advances one LED per interrupt, taking approximately 9.6 ms for 96 LEDs. Its framebuffer must not be treated as a simultaneously updated 96-bit time code. See [hardware evidence](hardware/uno-r4-wifi.md).
 
-### 3.2 两级推进，不提前冻结难以解码的协议
+### Encoding progression
 
-| 阶段 | 编码候选 | 可以获得的结果 | 限制 |
+| Stage | Candidate | Deliverable | Limitation |
 | --- | --- | --- | --- |
-| v0 可读性原型 | 固定顺序扫描 96 颗，初始 250 µs/slot，候选 100 µs/slot | 单帧曝光覆盖的扫描位置、周期内相位差、质量诊断 | 周期为 24 ms / 9.6 ms，无法独立区分整周期偏差 |
-| v1 正式测量候选 | 有明确生成规则和长周期的单灯位置序列，联合连续多帧解码 | 有条件地恢复共享 epoch、帧对应关系、完整 offset | 曝光积分会丢失槽位顺序；长周期本身不保证可辨识 |
+| v0 readability prototype | Fixed 96-LED sweep, initially 250 µs/slot, later 100 µs/slot | Exposure-covered positions, within-cycle phase differences, quality diagnostics | Periods of 24 ms / 9.6 ms cannot distinguish whole-cycle offsets |
+| v1 measurement protocol | Precisely specified long-period single-LED sequence, jointly decoded across frames | Shared epoch, frame associations, and complete offsets when identifiable | Exposure integration discards event order; a long period alone does not guarantee identifiability |
 
-v0 的输出只能标为周期内相位或候选集合。不能将其用于证明没有整帧错位：例如 100 µs 模式中的 0.2 ms 与 9.8 ms 偏差可能同相位。
+v0 outputs must be labeled phase-only or represented as candidate sets. For example, offsets of 0.2 ms and 9.8 ms can have the same phase under a 9.6 ms cycle. A phase match cannot prove absence of whole-frame errors.
 
-v1 在实现前必须确定序列生成规则、种子/初态、周期、起始标识、观测窗口与搜索范围。候选方案是受约束的伪随机单灯序列，控制各灯占空比并延长重复周期；不在初始化时指定未经论证的 LFSR 多项式。需要证明/验证所需曝光范围内积分向量及多帧组合足以排除候选别名。若不满足，先修改协议设计，不在 CV 端猜测。
+Before v1 implementation, define generation rules, seed/state, period, optical start identification, observation requirements, and search bounds. A candidate is a constrained pseudorandom sequence of LED positions with controlled duty cycles. Do not select an unexamined LFSR polynomial during initialization. Establish whether exposure-integrated vectors and multi-frame observations reject competing epochs over the intended operating range. If they do not, revise the protocol rather than guessing in the decoder.
 
-长曝光不是单纯的噪声问题：覆盖完整重复周期时相位信息可能消失。短曝光也可能只看到一颗灯，无法定位其时隙内位置。初期应固定曝光和增益，选择能看到若干时隙、又保留边界信息的曝光设置；具体范围由首批相机和光学可读性决定。
+Long exposures can erase phase information when they cover complete repeated cycles. Very short exposures may reveal only one LED without identifying a position within its slot. Initially use fixed exposure and gain, capturing several slots while retaining useful boundary information; choose actual settings from camera metadata and optical readability.
 
-## 4. CV 模块
+## 4. Offline CV analysis
 
-采用 Python 3.11+、NumPy、OpenCV headless 和 tqdm。CLI 使用标准库 argparse；配置与机器结果优先 JSON，减少额外依赖。输入是用户提供的一批图像：支持单相机图像序列及通过显式 crop 描述的拼接图，不集成采集 SDK、相机控制或其它采集仓库。视频容器读取仅在后续有明确需求时另议。
+Use Python 3.11+, NumPy, OpenCV headless, and tqdm. Use standard-library argparse and JSON input descriptions. Users supply images as independent camera sequences or explicitly cropped views of composite images. Do not integrate camera SDKs, device control, or another acquisition repository. Video-container input requires a later explicit request.
 
-处理步骤：
+Processing stages:
 
-1. 读入采集 manifest，检查 camera/node ID、帧列表、曝光参数与板型/编码版本。
-2. 用单独的慢速定位序列获得完整网格；首版允许显式提供四角和方向，生成几何校准文件。不要假设高速单帧总能看到四角。
-3. 根据平面映射采样每颗 LED；保留原图中的传感器行坐标。明显镜头畸变需要已有相机内参进行校正。
-4. 从暗背景与慢速点亮采集估计背景、各灯响应和噪声，提取非饱和光强。不能只用统一阈值把部分曝光变成二值。
-5. 按曝光积分模型估计起点/中点、可行时间区间或多个候选；记录残差、歧义与拒绝原因。
-6. 基于独立光学时间和明确的帧对应约束进行单调关联，输出匹配/未匹配帧；不得靠最近时间匹配掩盖整帧错位。
-7. 汇总相机对、节点对、时间序列及质量报告，流式写出逐帧结果并展示进度。
+1. Read the input manifest, camera/node membership, ordered frames, exposure information, and board/protocol identifiers.
+2. Obtain a complete grid from a separate slow localization sequence. Initially allow explicit corners and orientation; a high-speed image need not show all corners.
+3. Sample LED regions using a planar mapping while retaining original sensor coordinates. Significant lens distortion requires existing intrinsic calibration.
+4. Estimate background, per-LED response, and noise from dark and slow illumination captures. Extract unsaturated intensities; avoid reducing partial exposures to binary observations.
+5. Fit exposure integration to obtain start/midpoint estimates, feasible intervals, or competing candidates. Record residuals, ambiguity, and rejection reasons.
+6. Associate frames monotonically using optical time and explicit correspondence constraints. Do not hide whole-frame offsets with unrestricted nearest-time pairing.
+7. Stream per-frame results and aggregate camera/node metrics, quality diagnostics, and a report with progress feedback.
 
-模块按实现需要依次加入 `io`、`geometry`、`photometry`、`decode`、`metrics`、`report`、`cli`；不预先创建空接口层或插件发现框架。第一块板先直接按 board ID 选择实现，第二块板出现时再抽象真实公共部分。
+Add `io`, `geometry`, `photometry`, `decode`, `metrics`, `report`, and `cli` modules as functionality is implemented. Avoid empty interface layers and speculative plugin discovery. Start with explicit board selection; abstract shared behavior when a second board provides concrete requirements.
 
-## 5. 曝光模型与 rolling shutter
+## 5. Exposure model
 
-对 global shutter 的第 j 颗 LED，初步模型为：
+For LED j under global shutter, use the initial model:
 
 ```text
 I_j = background_j + gain_j * integral(L_j(t), t_start, t_start + exposure) + noise_j
 ```
 
-`L_j(t)` 由编码序列和板级导通窗口定义。优先使用已知曝光时间；仅在数据可辨识时联合估计曝光，并单独报告不确定度。亮度模型要求未饱和、响应已校准；相机 ISP、gamma 和压缩会影响这一前提。
+The sequence and board conduction windows define `L_j(t)`. Prefer known exposure duration. Joint exposure estimation is permitted only when identifiable, with separate uncertainty reporting. The model assumes unsaturated, calibrated response; ISP processing, gamma, and compression can violate that assumption.
 
-rolling shutter 各行曝光起点不同，不能把整个矩阵作为同一瞬间。第一版正式量化优先支持 global shutter；rolling shutter 可先做诊断，只有已知/已标定行时延和扫描方向时才输出校正的定量结果。模型使用原始传感器坐标、ROI 偏移和参考行：
+Rolling shutter assigns different exposure start times to different sensor rows. Initially prioritize quantitative global-shutter support. Rolling-shutter inputs may receive diagnostics; corrected quantitative results require known or calibrated line timing and direction:
 
 ```text
 t_start(y) = t_start(y_ref) + (y - y_ref) * line_time
 ```
 
-图像旋转、裁剪和 resize 必须保留到传感器坐标的映射。若读出沿列方向，模型对应改用列坐标。原理依据：[Basler Electronic Shutter Types](https://docs.baslerweb.com/electronic-shutter-types)。
+Preserve sensor coordinates, ROI offsets, and reference-row definitions through rotation, cropping, and resizing. Use column coordinates where the sensor scans by column. See [Basler Electronic Shutter Types](https://docs.baslerweb.com/electronic-shutter-types).
 
-## 6. 指标与判定
+## 6. Metrics and decisions
 
-默认报告曝光中点；需要曝光起点时显式指定。对于匹配帧，`delta_ab = t_b - t_a`，正值表示 B 比 A 晚。
+Default to exposure midpoint; exposure-start analysis is an explicit option. For matched frames, `delta_ab = t_b - t_a`; positive values mean B exposes later than A.
 
-- **Offset**：相机对偏差的中位数，同时保留逐帧 delta。
-- **Jitter**：delta 减去中位数后的样本标准差、绝对残差 P95、峰峰值及有效样本数。样本不足不输出虚假标准差。
-- **Drift**：另行拟合偏差随光学时间的斜率；去趋势后的 jitter 另列，不能替换原始统计。
-- **Frame consistency**：逐相机光学帧间隔、相对指定预期间隔的残差、缺失/重复/未匹配候选和异常区段。不以文件序号代替硬件帧计数。
-- **Node offset**：先报告跨节点相机对；节点摘要默认使用 manifest 指定的代表相机。只有各相机间固定偏差和采集对应关系明确时才做聚合，并标明方法。
+- **Offset:** median pairwise delta, retaining every valid frame-level value.
+- **Jitter:** sample standard deviation, P95 absolute residual, and peak-to-peak range after subtracting median delta. Report sample counts; insufficient samples do not yield a fabricated standard deviation.
+- **Drift:** separately fit delta against optical time. Detrended jitter supplements, rather than replaces, original statistics.
+- **Frame consistency:** optical inter-frame intervals, residuals against an explicitly specified expected interval, missing/duplicate/unmatched candidates, and anomalous segments. File indices are not hardware frame counters.
+- **Node offset:** report cross-node camera pairs first. Default node summaries use explicitly selected representative cameras. Aggregate only with established camera relationships and a documented method.
 
-报告区分 `pass`、`fail`、`inconclusive`。阈值由用户显式配置，250 µs 时隙不是默认通过阈值。仅在覆盖率、观测窗口和不确定度满足要求时判定；周期歧义或未知 rolling shutter 参数不得判为 pass。
+Results use `pass`, `fail`, or `inconclusive` when user-supplied criteria exist. Slot duration is not an acceptance threshold. Decisions require adequate coverage, observation span, and uncertainty. Periodic ambiguity or unknown rolling-shutter timing cannot yield a pass.
 
-## 7. 精度证据与实施阶段
+Frame pairing must preserve both user-supplied capture groups and algorithm-inferred associations. A supplied group is a synchronization claim to measure, not proof of simultaneous exposure. Do not optimize away the offsets being evaluated.
 
-时间量先保留 MCU ticks 和名义微秒换算；未标定振荡器时明确使用名义时钟尺度。硬件计时周期、ISR 延迟、光学导通、成像响应、解码误差是不同误差源。仅凭同一个 MCU 的内部计时或相机间一致性，不能证明外部可追溯的绝对 100 µs 准确度。
+## 7. Accuracy evidence and milestones
 
-基础使用不要求示波器或光电二极管。如果后续需要对外宣称经标定的绝对精度，可单独安排外部校准；没有这项证据时报告为未标定原型及观测到的重复性。下面的验证是未来工作计划，执行遵守用户对科研测试的授权要求。
+Retain MCU ticks and nominal microsecond conversion. Mark uncalibrated clock scales explicitly. Timer period, ISR latency, optical conduction, image response, and decoding error are distinct error sources. Internal MCU timing or agreement between cameras alone does not establish externally traceable absolute accuracy.
 
-| 阶段 | 交付 | 进入下一阶段的依据 |
+Routine use requires no oscilloscope or photodiode. A later claim of calibrated absolute accuracy may require separate external calibration. Without it, describe an uncalibrated prototype and observed repeatability. Future validation activities below require the user's explicit authorization under project conventions.
+
+| Milestone | Deliverable | Evidence needed to proceed |
 | --- | --- | --- |
-| M0（本次） | 方案、约定、工程布局和配置骨架 | 文档可追溯、无未声明的功能 |
-| M1 | 单灯定位/慢扫模式、250 µs 定时扫描、运行描述 | 实际相机能辨认 LED；GPIO 与占空比经过核对 |
-| M2 | 手动几何校准、光强提取、v0 周期相位解码 | 对真实帧能给出可解释区间与失败原因 |
-| M3 | 固定 v1 协议、epoch 解码、多相机 CLI 与报告 | 整周期/整帧歧义得到解决，指标定义一致 |
-| M4 | 100 µs 模式、rolling shutter 扩展、性能优化 | 给出各相机/曝光条件下的有效覆盖率和误差证据 |
+| M0: initialization | Design, conventions, layout, configuration scaffolding | Traceable documentation and explicit implementation status |
+| M1 | Slow localization, 250 µs single-LED sweep, run description | Actual images resolve LEDs; GPIO and duty cycles are reviewed |
+| M2 | Manual geometry, photometry, v0 phase decoding | Real-image results have interpretable intervals and rejection reasons |
+| M3 | Frozen v1 protocol, epoch decoding, multi-camera CLI and reports | Whole-cycle/frame ambiguity is resolved under stated conditions |
+| M4 | 100 µs mode, rolling-shutter support, performance improvements | Coverage and error evidence for supported cameras and exposures |
 
-首批相机已确定为 Arducam B0267 的四路 OV9281 monochrome global shutter，现有采集记录包含 5120 × 800 横向拼接输入和约 44.972 fps 的实测模式。具体依据与限制见[B0267 输入记录](hardware/arducam-b0267-input.md)。仍需由实际数据确定曝光、板在图像中的尺寸、帧对应关系及跨节点共视情况；这些不阻碍 M0 初始化。
+The first image source is Arducam B0267 with four monochrome global-shutter OV9281 sensors. Existing records include 5120 × 800 composite frames and a measured mode around 44.972 fps. See [B0267 input notes](hardware/arducam-b0267-input.md). Actual exposure, target image size, frame correspondence, and shared visibility still depend on the supplied dataset.

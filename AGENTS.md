@@ -1,38 +1,38 @@
-# 项目开发约定
+# Contributor and Agent Instructions
 
-## 范围与工作方式
+## Scope and working conventions
 
-- 本项目是科研测量工具，包含 MCU 固件与离线 CV 分析库。先阅读 `docs/design.md`、`docs/protocol.md` 及相关板型文档。
-- 相机侧完全由用户负责：本仓库仅接收图像及描述信息，不集成相机驱动、SDK、采集程序或对其它采集仓库的运行依赖。
-- 文档和协作默认中文；代码标识符、CLI 参数和机器可读字段用英文。
-- 保持实现简洁；不主动编写兜底逻辑、自动降级、额外兼容层或未提出的功能。
-- 未经用户明确要求，不编写或执行测试、本地烟测、模拟实验或基准实验。文档审阅和 Git diff 检查不属于运行测试。
-- 新依赖缺失时，提出具体安装请求，不擅自安装或替换实现。
-- 长耗时的数据读取、解码和报告阶段应提供细粒度进度；进度写 stderr，机器结果写 stdout 或文件。MCU ISR 中禁止日志与进度输出。
-- 保持细粒度 Git 提交：完成一个小的、完整的修改单元即 commit；不混入无关改动，不自动 push，不覆盖用户修改。
+- This is scientific measurement software comprising MCU firmware and offline CV analysis. Read `docs/design.md`, `docs/protocol.md`, and relevant hardware notes before implementation.
+- All repository documentation, code comments, identifiers, configuration descriptions, and commit messages must be in English. Conversation language follows the user.
+- Users own camera acquisition. Accept images and descriptive metadata; do not integrate camera drivers, SDKs, acquisition programs, or runtime dependencies on another acquisition repository.
+- Keep implementations simple. Do not add unsolicited fallback logic, automatic degradation, compatibility layers, or features.
+- Do not write or run tests, local smoke checks, simulations, or benchmarks unless explicitly requested by the user. Document review and Git diff inspection are permitted.
+- If a required dependency is missing, request installation of the specific dependency instead of installing it automatically or substituting a different implementation.
+- Long image processing operations should expose granular progress on stderr. Machine-readable results belong on stdout or in files. Never log or render progress inside an MCU ISR.
+- Commit small, complete changes frequently. Do not mix unrelated changes, push automatically, overwrite user edits, or rewrite history without authorization.
 
 ## Python
 
-- 使用 Python 前，先检查项目 `.venv` / `venv`，其次检查可用 conda 环境。
-- 每次选定环境后记录解释器绝对路径；仅使用该解释器对应的安装工具。
-- 使用系统 Python 前必须询问用户授权；不要通过脚本 shebang 或工具包装隐式绕过这一要求。
-- 核心功能放在 `src/camsync_check/`，CLI 只负责参数、调用与退出状态。
-- 初期 Python 3.11+；NumPy、OpenCV headless、tqdm 为计划中的最小运行依赖。安装及锁定版本按 `docs/development.md` 处理。
+- Before using Python, check project `.venv` / `venv` environments first, then available conda environments.
+- Record the selected interpreter's absolute path and use its associated package installation tools.
+- Always obtain user authorization before using system Python. Do not bypass this rule through script shebangs or wrappers.
+- Use a `src/camsync_check/` package. Keep CLI argument handling and orchestration separate from analysis.
+- The initial target is Python 3.11+. Planned minimal runtime dependencies are NumPy, OpenCV headless, and tqdm; follow `docs/development.md` for installation and version management.
 
-## 固件
+## Firmware
 
-- 正常只编程 RA4M1，不改 ESP32-S3 固件；使用 VS Code / PlatformIO，不要求 Arduino IDE。
-- 板型专属 GPIO、timer、引脚映射放在 `firmware/src/boards/<board_id>/`。
-- 时间基准来自硬件 timer；ISR 执行有界、预计算的 GPIO 操作，不使用 `delay()`、串口输出、动态分配或阻塞调用。
-- 不同时启用官方矩阵扫描驱动与自定义驱动。只修改矩阵 GPIO 的相关位，保留其它外设状态。
-- GPIO 的高阻、source/sink 切换及占空比必须有硬件依据；不能把官方扫描模式的电流条件直接外推到持续点亮。
-- 新增底层实现记录官方来源版本及映射方向；若引入第三方代码，保留原始许可与归属。
+- Normally program only RA4M1, retaining the official ESP32-S3 firmware. Use VS Code / PlatformIO; do not require Arduino IDE.
+- Keep board-specific GPIO, timer, and pin mappings under `firmware/src/boards/<board_id>/`.
+- Use hardware timers as the timing basis. ISR work must be bounded and precomputed where possible; no delays, serial output, dynamic allocation, or blocking operations.
+- Never run the official matrix scanner alongside the custom driver. Modify only matrix-related GPIO bits and preserve other peripherals.
+- Justify high-impedance transitions, source/sink switching, and duty cycles using hardware evidence. Do not extrapolate scan-mode electrical conditions to continuous illumination.
+- Record upstream versions and mapping orientation. Preserve license notices and attribution when importing third-party code.
 
-## 测量与数据
+## Measurement and data
 
-- 分开记录编码时隙、光学边沿误差、MCU 时钟尺度误差、CV 解码不确定度与实际测量结果。
-- 帧号、主机时间戳不能隐式当作共享曝光真值。不得通过对齐算法消掉要测量的 offset 或 drift。
-- 周期歧义、曝光不足、饱和、遮挡、掉帧和 rolling shutter 未建模均显式报告，不能返回貌似有效的零偏差。
-- 原始视频、帧、个人实验配置和生成报告不入 Git；仅提交匿名、明确授权的示例数据。
-- 协议、板型描述和报告分别版本化；影响解码语义的改动同步更新文档。
-- 报告必须说明估计的时间位置（曝光起点/中点/某行），以及有效覆盖率、失败原因与不确定度来源。
+- Distinguish slot duration, optical edge error, MCU clock scale error, decoder uncertainty, and observed measurement accuracy.
+- Frame indices and host timestamps are not shared exposure ground truth. Alignment must not remove the offset or drift being measured.
+- Report periodic ambiguity, insufficient exposure information, saturation, occlusion, missing frames, and unmodeled rolling shutter explicitly; never substitute a plausible zero offset.
+- Keep raw captures, private experiment settings, and generated reports out of Git. Only include anonymized example data explicitly authorized for inclusion.
+- Version optical protocols, board profiles, and report formats separately. Update documentation whenever decoding semantics change.
+- State which exposure instant is estimated, the valid coverage, rejection reasons, and uncertainty sources in every report.
