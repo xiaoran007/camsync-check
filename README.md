@@ -16,7 +16,28 @@ make firmware                    # Compile UNO R4 WiFi firmware
 
 The environment pins its Debian Bookworm base image by digest, PlatformIO Core 6.1.18, `renesas-ra@1.9.0`, and ArduinoCore-renesas 1.6.0. Linux amd64 is used, including emulation on ARM hosts. The completed build used GCC 7.2.1. Build products are in `firmware/.pio/build/uno_r4_wifi/`; packages are cached in `.cache/platformio/`. Transitive dependencies are not exhaustively locked.
 
-Compilation and flashing are separate. USB passthrough and uploading are not configured. Program RA4M1 only, retaining the official ESP32-S3 firmware. After boot, the target runs without a serial connection: one LED per 250 µs slot, with all 96 LEDs visited once per 24 ms cycle. Serial at 115200 accepts `?` for JSON status, `s` for the measurement sequence, `c` for a slow corner-identification diagnostic, and `d` for dark. Use `s` throughout a capture; mode changes and resets interrupt the sequence.
+Compilation stays in Docker; uploading runs on the host through Arduino CLI without USB passthrough. On macOS, install the host tools once, with installation authorized:
+
+```sh
+brew install arduino-cli
+arduino-cli core update-index
+arduino-cli core install arduino:renesas_uno@1.6.0
+```
+
+Connect the UNO R4 WiFi with a USB data cable. From the repository root:
+
+```sh
+make ports                                    # Find the board's actual port
+make firmware                                 # Build the current source in Docker
+make upload PORT=/dev/cu.usbmodemXXXX           # Replace with the actual port
+make monitor PORT=/dev/cu.usbmodemXXXX          # Serial monitor at 115200 baud
+```
+
+The host commands use the project `.venv/bin/python` and require `arduino-cli` on PATH. An executable elsewhere can be selected with `ARDUINO_CLI=/path/to/arduino-cli`. The wrapper only supports `BOARD=uno_r4_wifi`; it requires an explicit port for upload/monitor and never guesses among connected devices. `make upload` writes the existing `firmware/.pio/build/uno_r4_wifi/firmware.bin` to RA4M1, replacing its current application and retaining the ESP32-S3 bridge firmware. It does not rebuild, install dependencies, or retry after failure. Missing or empty firmware is rejected; rebuild after source changes to avoid uploading a stale artifact. Close the serial monitor before uploading again.
+
+If upload cannot reach the board, double-press RESET just after power-up, run `make ports` again, and retry with the reported port. See the [official board datasheet](https://docs-content.arduino.cc/resources/datasheets/ABX00087-datasheet.pdf) and [Arduino CLI upload reference](https://docs.arduino.cc/arduino-cli/commands-reference/arduino-cli_upload).
+
+After boot, the target runs without a serial connection: one LED per 250 µs slot, with all 96 LEDs visited once per 24 ms cycle. Serial at 115200 accepts `?` for JSON status, `s` for the measurement sequence, `c` for a slow corner-identification diagnostic, and `d` for dark. Check `ready: true`, `protocol: "r4-permuted96-v1"`, and `mode: "sweep"`. Use `s` throughout a capture; mode changes and resets interrupt the sequence. Exit the monitor with Ctrl-C.
 
 Python uses the project `.venv` exclusively. With dependency installation authorized:
 
@@ -69,3 +90,5 @@ Positive offset means the other camera starts exposure later. The default one-sl
 Firmware lives in `firmware/`, with board-specific timer/GPIO code in `firmware/src/boards/`. Python lives in `src/camsync_check/`, packaged profiles alongside it, and run examples in `configs/`. `data/`, `outputs/`, `.venv/`, and build caches are ignored.
 
 All repository text and commits use English. Keep usage here, development rules in [AGENTS.md](AGENTS.md), and rationale in `docs/design.md`. Comprehensive automated tests are required: unit, integration, deterministic synthetic-image, and end-to-end CLI coverage, including the two-board workflow and failure cases. Run affected tests during development and the full suite before completing implementation changes. Software tests do not establish physical timing accuracy. Request missing dependencies before installation. The repository retains its [GPL v3 license text](LICENSE).
+
+Run the current automated suite with `make test` (standard-library `unittest`, using `.venv`). Upload tests use a fake Arduino CLI and never access a real board. Current coverage is limited to the host upload/monitor wrapper and its Make integration; image-analysis, protocol, and firmware behavior tests remain to be implemented. No real upload has been validated yet.
