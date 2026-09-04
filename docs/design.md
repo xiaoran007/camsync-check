@@ -4,7 +4,7 @@ This document contains measurement rationale and evidence. Usage, configuration 
 
 ## Reference and scope
 
-All cameras initially observe one stationary UNO R4 WiFi target. Multiple acquisition nodes group cameras; they do not imply multiple independent LED clocks. Non-overlapping views need a separate shared-reference design.
+Compared cameras observe one stationary UNO R4 WiFi target. The primary use case is two B0267 synchronization boards, each supplying four camera views. The boards may share one acquisition node or use separate nodes; board identity and node identity are independent. At least one selected camera on each board must see the same target. Full eight-camera diagnostics require target visibility in all eight views. Non-overlapping views need a separate shared-reference design.
 
 Images measure exposure relationships. They cannot independently separate operating-system clock error, camera-internal latency, and transport delay. Node results are optical offsets between explicitly selected representative cameras or a documented aggregation.
 
@@ -36,6 +36,8 @@ Camera profiles explicitly define dimensions, channels, dtype, shutter type, and
 
 Use a slow localization sequence or explicit corners and orientation to establish the grid. High-speed frames need not show all corners. Correct significant distortion using supplied intrinsics; preserve original sensor coordinates. Estimate background and per-LED responses from suitable calibration images, then extract unsaturated intensities.
 
+Implementation proceeds from a configured wide-image crop to a per-camera target ROI. Fit the planar grid from explicit correspondences with OpenCV homography functions; project 96 LED sampling regions into the original image rather than measuring brightness only after resampling. A diagnostic rectified image is useful for review. For each LED, integrate its foreground region, subtract local background, and normalize by its calibrated response. Each frame becomes a 96-element intensity vector, not merely a list of thresholded bright spots. Use intensity fitting against the known sequence to estimate the exposure window; use multiple frames to reject temporal aliases without smoothing away frame-level jitter.
+
 For a global-shutter observation of LED j:
 
 ```text
@@ -53,6 +55,16 @@ Associate frames monotonically using optical evidence and explicit correspondenc
 Default to exposure midpoint. Define `delta_ab = t_b - t_a`, positive when B exposes later. Report median offset, sample standard deviation and P95 absolute residual after median removal, peak-to-peak residual range, and sample counts. Fit drift separately; detrended jitter supplements original statistics. Report optical inter-frame intervals and missing/duplicate/unmatched candidates without treating file indices as hardware counters.
 
 Report cross-node camera pairs before representative-camera node summaries. Aggregation must state its method and prerequisites. MCU ticks and nominal microseconds remain distinguishable; an uncalibrated oscillator is not a traceable absolute clock. Camera agreement or internal MCU timing alone cannot establish 100 µs accuracy.
+
+## Two-board comparison
+
+Decode each of the four views independently for every source frame. For a supplied pair of source frames `(n, m)`, retain all valid cross-board differences `delta_ij(n, m) = t_Bj(m) - t_Ai(n)`: up to 16 comparisons. Also retain six within-board pairs per board, so a single sensor's optical skew is not hidden by a board-wide average.
+
+The default board summary is the offset between explicitly configured representative cameras, labeled with their identities. Never silently replace a missing representative. Once within-board timing consistency is established, an explicitly selected median-of-camera-times summary may be added; it is an operational board timestamp, not proof that every exposure was simultaneous. Shared reference errors and four views from one source frame are not independent observations.
+
+Keep two questions separate: (1) how far apart the exposures in the acquisition system's supplied pairs were, and (2) which frames are closest in independently decoded optical time. The first diagnoses the system's pairing; the second requires explicit optical-association output with unmatched/duplicate candidates. Without a shared capture index or trigger, frame zero on one board does not define frame zero on the other. Cyclic phase and whole-frame displacement must remain separate; v0 alone cannot resolve arbitrary whole-cycle offsets.
+
+Per-board-pair reports include representative-camera offset versus time, median offset, jitter, drift, unmatched frames, and the 4 × 4 cross-board offset matrix when all views are visible. A single matched image pair provides a timing comparison; jitter and drift require an ordered sequence. Do not infer a node clock error merely because the cameras are attached to different nodes.
 
 Planned artifacts are `frames.csv`, `pairs.csv`, `summary.json`, and an offline `report.html`. Include resolved configuration/profile snapshots, versions, frame associations, feasible intervals, rejection reasons, valid coverage, and limits. Call intervals confidence intervals only with a justified statistical model. Shared reference errors need not be independent.
 

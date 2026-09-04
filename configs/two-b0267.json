@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "target": {
+    "profile": "builtin:uno_r4_wifi",
+    "protocol": "sweep96-v0",
+    "slot_us": 250
+  },
+  "sources": [
+    {
+      "id": "source_a",
+      "sync_board_id": "b0267_a",
+      "node_id": "node_0",
+      "profile": "builtin:b0267",
+      "camera_ids": {
+        "view_0": "a_camera_0",
+        "view_1": "a_camera_1",
+        "view_2": "a_camera_2",
+        "view_3": "a_camera_3"
+      },
+      "frames": [
+        "../data/two-b0267/board_a/frame_000001.png",
+        "../data/two-b0267/board_a/frame_000002.png"
+      ],
+      "exposure": {"value_us": null, "provenance": "unknown"}
+    },
+    {
+      "id": "source_b",
+      "sync_board_id": "b0267_b",
+      "node_id": "node_0",
+      "profile": "builtin:b0267",
+      "camera_ids": {
+        "view_0": "b_camera_0",
+        "view_1": "b_camera_1",
+        "view_2": "b_camera_2",
+        "view_3": "b_camera_3"
+      },
+      "frames": [
+        "../data/two-b0267/board_b/frame_000001.png",
+        "../data/two-b0267/board_b/frame_000002.png"
+      ],
+      "exposure": {"value_us": null, "provenance": "unknown"}
+    }
+  ],
+  "comparison": {
+    "reference_source": "source_a",
+    "other_source": "source_b",
+    "reference_camera": "a_camera_0",
+    "other_camera": "b_camera_0",
+    "frame_pairs": [[0, 0], [1, 1]]
+  },
+  "output": "../outputs/two-b0267"
+}

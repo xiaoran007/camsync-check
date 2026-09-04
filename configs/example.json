@@ -8,6 +8,7 @@
   "sources": [
     {
       "id": "wide_0",
+      "sync_board_id": "b0267_0",
       "node_id": "node_0",
       "profile": "builtin:b0267",
       "camera_ids": {
