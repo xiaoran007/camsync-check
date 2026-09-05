@@ -94,6 +94,7 @@ def write_report(run: Run, pairs: list[dict], summary: dict) -> None:
                       for s in run.sources for c in s.cameras if (run.output / "diagnostics" / f"{c.id}.png").exists())
     localization = "".join(
         f'<details><summary>{escape(cid)}: {escape(entry["status"])} — {escape(entry["reason"])}</summary>'
+        f'<pre>{escape(json.dumps(entry, indent=2))}</pre>'
         f'<img src="localization/{cid}-projection.png" alt="Temporal brightness range">'
         + (f'<img src="localization/{cid}-grid.png" alt="Located grid">' if entry["status"] == "valid" else "")
         + '</details>' for cid, entry in run.snapshot["localization"]["cameras"].items())
@@ -116,7 +117,7 @@ Bars show conditional bounds; crosses show rejected pairs. An empty or partial r
 <h2>Quality and pairing</h2><p>Frame rejection counts:</p><pre>{rejection_text}</pre>
 <p>Representative-pair decisions (tolerance: {display(run.settings.pass_tolerance_us)} µs):</p><pre>{decisions}</pre>
 <p>Frames not included in supplied cross-board pairs:</p><pre>{unmatched}</pre>
-<h2>Automatic R4 localization</h2>{localization}
+<h2>Automatic R4 localization</h2><p>SIFT reference matching establishes LED numbering; changing LEDs refine the grid.</p>{localization}
 <h2>LED sampling diagnostics</h2><p>Green: on; red: off; yellow: near threshold. These are the first supplied frames only.</p>{images}
 <h2>Method limits</h2><ul>{limitations}</ul>
 <p>Machine-readable results: <a href="frames.csv">frames.csv</a>, <a href="led_signals.csv">led_signals.csv</a>,

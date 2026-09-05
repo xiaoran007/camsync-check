@@ -185,7 +185,7 @@ def analyze(run: Run) -> tuple[list[dict], dict]:
                          | statistics(rows, lookup[source_a].frame_period_us))
     primary = [row for row in pairs if row["representative"]]
     primary_period = lookup[run.comparison.reference].frame_period_us if run.comparison else None
-    summary = {"schema_version": 1, "protocol": "r4-permuted96-v1", "metric": "exposure_start_offset",
+    summary = {"schema_version": 1, "protocol": "r4-rowmajor96-v2", "metric": "exposure_start_offset",
                "units": "us", "slot_us": run.slot_us, "period_us": run.slot_us * run.led_count,
                "max_abs_offset_prior_us": run.settings.max_offset_us,
                "target_resolution_us": run.settings.resolution_us,

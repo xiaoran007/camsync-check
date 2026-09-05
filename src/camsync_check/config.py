@@ -111,7 +111,7 @@ class Comparison:
 class Localization:
     max_frames: int
     min_valid_frames: int
-    orientation_margin: int
+    reference: str
 
 
 @dataclass(frozen=True)
@@ -143,18 +143,20 @@ def load_config(path: Path) -> Run:
             or target_profile.get("matrix", {}).get("columns") != 12
             or target_profile.get("matrix", {}).get("led_count") != 96
             or target_profile.get("matrix", {}).get("indexing") != "row_major_zero_based"
-            or target["protocol"] != "r4-permuted96-v1"
+            or target["protocol"] != "r4-rowmajor96-v2"
             or target["slot_us"] != 250):
-        raise ConfigError("This version implements UNO R4 WiFi r4-permuted96-v1 at 250 us only")
+        raise ConfigError("This version implements UNO R4 WiFi r4-rowmajor96-v2 at 250 us only")
     canonical = profile("builtin:uno_r4_wifi", path.parent, "target")
     if any(target_profile.get(key) != canonical[key] for key in ("protocol", "slot_us", "scan_order")):
         raise ConfigError("Target protocol and scan order must match the firmware's built-in R4 profile")
     loc = data["localization"]
-    keys(loc, {"max_frames", "min_valid_frames", "orientation_margin"}, set(), "localization")
-    max_frames = integer(loc["max_frames"], "localization.max_frames", 3, 10000)
+    keys(loc, {"max_frames", "min_valid_frames", "reference"}, set(), "localization")
+    max_frames = integer(loc["max_frames"], "localization.max_frames", 2, 10000)
     localization = Localization(max_frames,
-        integer(loc["min_valid_frames"], "localization.min_valid_frames", 3, max_frames),
-        integer(loc["orientation_margin"], "localization.orientation_margin", 1, max_frames))
+        integer(loc["min_valid_frames"], "localization.min_valid_frames", 2, max_frames),
+        loc["reference"])
+    if not isinstance(localization.reference, str) or not localization.reference:
+        raise ConfigError("localization.reference must name a built-in or reference JSON file")
     a = data["analysis"]
     keys(a, {"on_threshold", "threshold_margin", "max_saturated_fraction",
              "boundary_slack_slots", "max_abs_offset_us", "target_resolution_us", "pass_tolerance_us"},

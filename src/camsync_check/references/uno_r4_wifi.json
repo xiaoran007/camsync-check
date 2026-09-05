@@ -1,0 +1,186 @@
+{
+  "schema_version": 1,
+  "kind": "reference",
+  "board_id": "uno_r4_wifi",
+  "image": "uno_r4_wifi.png",
+  "image_size": [
+    1920,
+    1080
+  ],
+  "led_corners_xy": [
+    [
+      971,
+      553
+    ],
+    [
+      1267,
+      553
+    ],
+    [
+      1267,
+      743
+    ],
+    [
+      971,
+      743
+    ]
+  ],
+  "feature_polygon_xy": [
+    [
+      538,
+      274
+    ],
+    [
+      1347,
+      274
+    ],
+    [
+      1385,
+      427
+    ],
+    [
+      1385,
+      826
+    ],
+    [
+      535,
+      826
+    ]
+  ],
+  "exclude_polygons_xy": [
+    [
+      [
+        940,
+        526
+      ],
+      [
+        1310,
+        526
+      ],
+      [
+        1310,
+        770
+      ],
+      [
+        940,
+        770
+      ]
+    ],
+    [
+      [
+        493,
+        334
+      ],
+      [
+        619,
+        334
+      ],
+      [
+        619,
+        482
+      ],
+      [
+        493,
+        482
+      ]
+    ],
+    [
+      [
+        529,
+        524
+      ],
+      [
+        798,
+        524
+      ],
+      [
+        798,
+        724
+      ],
+      [
+        529,
+        724
+      ]
+    ],
+    [
+      [
+        1120,
+        348
+      ],
+      [
+        1285,
+        348
+      ],
+      [
+        1285,
+        518
+      ],
+      [
+        1120,
+        518
+      ]
+    ],
+    [
+      [
+        499,
+        725
+      ],
+      [
+        710,
+        725
+      ],
+      [
+        710,
+        859
+      ],
+      [
+        499,
+        859
+      ]
+    ],
+    [
+      [
+        715,
+        324
+      ],
+      [
+        819,
+        324
+      ],
+      [
+        819,
+        413
+      ],
+      [
+        715,
+        413
+      ]
+    ],
+    [
+      [
+        1308,
+        487
+      ],
+      [
+        1402,
+        487
+      ],
+      [
+        1402,
+        590
+      ],
+      [
+        1308,
+        590
+      ]
+    ]
+  ],
+  "provenance": {
+    "creator": "Arduino",
+    "source": "https://github.com/arduino/docs-content/blob/e0be49c2e6dfcf68923c3ddba166a982cea0c68a/content/hardware/02.uno/boards/uno-r4-wifi/datasheet/assets/featured.png",
+    "license": "CC-BY-SA-4.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "modifications": "Image unmodified; LED coordinates and feature masks added as separate metadata.",
+    "image_sha256": "9f042ead730dc8f772332dcc6e988b375451fb3fcac1478ab3db10708ae619aa"
+  }
+}

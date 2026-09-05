@@ -11,7 +11,7 @@
   },
   "target": {
     "profile": "builtin:uno_r4_wifi",
-    "protocol": "r4-permuted96-v1",
+    "protocol": "r4-rowmajor96-v2",
     "slot_us": 250
   },
   "sources": [
@@ -110,8 +110,8 @@
   },
   "output": "../outputs/two-b0267",
   "localization": {
-    "max_frames": 48,
-    "min_valid_frames": 3,
-    "orientation_margin": 2
+    "reference": "builtin:uno_r4_wifi",
+    "max_frames": 8,
+    "min_valid_frames": 2
   }
 }
