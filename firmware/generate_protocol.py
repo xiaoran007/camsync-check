@@ -8,8 +8,8 @@ Import("env")
 profile = json.loads((Path(env.subst("$PROJECT_DIR")).parent /
                       "src/camsync_check/profiles/uno_r4_wifi.json").read_text())
 order = profile["scan_order"]
-if sorted(order) != list(range(96)) or profile["slot_us"] != 250:
-    raise ValueError("Expected a 96-LED permutation at 250 us")
+if order != list(range(96)) or profile["slot_us"] != 250 or profile["protocol"] != "r4-rowmajor96-v2":
+    raise ValueError("Expected row-major LEDs 0 through 95 at 250 us")
 directory = Path(env.subst("$BUILD_DIR")) / "generated"
 directory.mkdir(parents=True, exist_ok=True)
 header = directory / "optical_protocol.h"
